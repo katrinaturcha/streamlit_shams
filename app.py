@@ -248,11 +248,11 @@ if file_old and file_new:
         # сохраняем
         st.session_state["df_compare_filtered"] = df_filtered
 
-        st.subheader("2.2. Статистика сравнения")
+        st.subheader("2.3. Статистика сравнения")
         stats = comparison_stats(df_compare)
         st.table(stats)
 
-        st.subheader("2.3. Выгрузка обработанных файлов")
+        st.subheader("2.4. Выгрузка обработанных файлов")
 
         # --- достаём иерархию ---
         df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
@@ -373,11 +373,11 @@ if file_old and file_new:
             # ----------------------------
             # 2. Берём отфильтрованную таблицу сравнения
             # ----------------------------
-            if "df_filtered" not in st.session_state:
+            if "df_compare_filtered" not in st.session_state:
                 st.error("Ошибка: отсутствует df_filtered. Выполните Шаг 2.")
                 st.stop()
 
-            df_filtered = st.session_state["df_filtered"]
+            df_filtered = st.session_state["df_compare_filtered"]
 
             # ----------------------------
             # 3. Присоединяем df_edit → df_filtered
