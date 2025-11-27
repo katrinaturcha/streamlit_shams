@@ -10,8 +10,8 @@ def compare_shams(df_old, df_new):
     df_new = df_new.copy()
 
     # нормализуем ключ
-    df_old["Subclass_norm"] = df_old["Subclass"].apply(normalize_subclass)
-    df_new["Subclass_norm"] = df_new["Subclass"].apply(normalize_subclass)
+    df_old["Subclass_norm"] = df_old["Subclass"].apply(normalize_subclass_simple)
+    df_new["Subclass_norm"] = df_new["Subclass"].apply(normalize_subclass_simple)
 
     df_old = df_old[df_old["Subclass_norm"].notna()]
     df_new = df_new[df_new["Subclass_norm"].notna()]
@@ -48,8 +48,8 @@ def compare_shams(df_old, df_new):
         diffs = []
 
         if row["status"] == "potentially_changed":
-            old_val = normalize_text(row.get("Subclass_en_old", ""))
-            new_val = normalize_text(row.get("Subclass_en_new", ""))
+            old_val = normalize_text_for_compare(row.get("Subclass_en_old", ""))
+            new_val = normalize_text_for_compare(row.get("Subclass_en_new", ""))
 
             if old_val != new_val:
                 diffs.append("Subclass_en")
