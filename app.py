@@ -351,10 +351,6 @@ if file_old and file_new:
         # ШАГ 3. Присоединение shams_edit1
         # =========================
 
-        # ============================================================
-        # ШАГ 3 — Загрузка и присоединение shams_edit1.xlsx
-        # ============================================================
-
         st.header("Шаг 3. Загрузите первый отредактированный файл и присоедините его")
 
         edit_file = st.file_uploader(
@@ -384,28 +380,96 @@ if file_old and file_new:
             # ----------------------------
             df_joined = join_with_edit(df_filtered, df_edit)
 
-            # сохраняем результат в session_state
+            # сохраняем результат
             st.session_state["df_joined"] = df_joined
 
-            # ----------------------------
-            # 4. Вывод результата
-            # ----------------------------
             st.subheader("3.1. Итоговая таблица с присоединённым shams_edit1")
             st.dataframe(df_joined, use_container_width=True)
 
             # ----------------------------
+            # 4. Дополняем итоговый Excel файлами иерархий
+            # ----------------------------
+
+            (
+                df_sec_combined,
+                df_div_combined,
+                df_grp_combined,
+                df_cls_combined,
+            ) = st.session_state["dfs_combined"]
+
+
+            def generate_joined_excel(df_joined, df_sec, df_div, df_grp, df_cls):
+                output = io.BytesIO()
+
+                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                    df_joined.to_excel(writer, sheet_name="Joined", index=False)
+                    df_sec.to_excel(writer, sheet_name="Sections", index=False)
+                    df_div.to_excel(writer, sheet_name="Divisions", index=False)
+                    df_grp.to_excel(writer, sheet_name="Groups", index=False)
+                    df_cls.to_excel(writer, sheet_name="Classes", index=False)
+
+                return output.getvalue()
+
+
+            joined_bytes = generate_joined_excel(
+                df_joined,
+                df_sec_combined,
+                df_div_combined,
+                df_grp_combined,
+                df_cls_combined,
+            )
+
+            # ----------------------------
             # 5. Кнопка скачать Excel
             # ----------------------------
-            joined_bytes = io.BytesIO()
-            df_joined.to_excel(joined_bytes, index=False)
-            joined_bytes.seek(0)
-
             st.download_button(
                 "Скачать итоговую таблицу (shams_joined.xlsx) для последующего перевода и редактивания в Google Sheets",
                 data=joined_bytes,
                 file_name="shams_joined.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
+            # =========================
+            # ШАГ 4. Логирование изменений после перевода
+            # =========================
+
+            st.header("Шаг 4. Загрузите файл с переводом для логирования изменений")
+
+            st.markdown(
+                """
+                Здесь будут сравниваться **объединённый файл до перевода и редактирования**
+                и **конечная версия отправки в БД**:
+                - какие строки были удалены  
+                - какие строки были исправлены  
+                - какие записи добавлены  
+                - каким менеджером были внесены изменения  
+
+                **Осталось определить окончательный состав столбцов, которые войдут в таблицу для перевода.**
+                """
+            )
+
+            translation_file = st.file_uploader(
+                "Загрузите файл после перевода (шаг: Google Sheets → выгрузка в Excel)",
+                type=["xlsx"],
+                key="translation_file",
+            )
+
+            if translation_file is not None:
+                st.success("Файл с переводом загружен успешно.")
+
+                df_translation = pd.read_excel(translation_file)
+
+                st.subheader("4.1. Загруженная таблица с переводом")
+                st.dataframe(df_translation, use_container_width=True)
+
+                # сохраняем временно, чтобы использовать при разработке шага сравнения
+                st.session_state["df_translation"] = df_translation
+
+                st.info(
+                    "На следующем шаге будет реализовано сравнение версии ДО перевода и ПОСЛЕ перевода.\n"
+                    "Задача: определить, какие строки изменились, какие удалены, и кто из менеджеров внёс изменения."
+                )
+
 
 else:
     st.info("Загрузите оба файла (старый и новый), чтобы начать.")
