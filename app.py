@@ -98,23 +98,77 @@ if file_old and file_new:
         # 1) Показываем отдельные таблицы иерархии
         # -----------------------------------------
 
-        st.subheader("2.1. Отдельные таблицы иерархии (новый файл)")
+        st.subheader("2.1. Отдельные таблицы иерархии (объединённые старый + новый)")
 
+        # достаём иерархию
+        df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
         df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
 
+
+        # =======================================
+        # 1. Универсальная функция объединения
+        # =======================================
+        def merge_unique(df_old, df_new, key):
+            """
+            Объединяет старую и новую таблицу по ключу.
+            Если код есть в обеих — берём новую запись.
+            """
+            df_old = df_old.copy()
+            df_new = df_new.copy()
+
+            df_old["source"] = "old"
+            df_new["source"] = "new"
+
+            # соединяем
+            df = pd.concat([df_old, df_new], ignore_index=True)
+
+            # сортируем так, чтобы новые были последними — overwrite
+            df = df.sort_values(["source"], ascending=True)
+
+            # убираем дубликаты по ключу, оставляя новую запись
+            df_unique = df.drop_duplicates(subset=[key], keep="last")
+
+            # удаляем служебный столбец
+            df_unique = df_unique.drop(columns=["source"])
+
+            # сортировка по ключу для красоты
+            df_unique = df_unique.sort_values(key)
+
+            return df_unique.reset_index(drop=True)
+
+
+        # =======================================
+        # 2. Объединяем все иерархии
+        # =======================================
+        df_sec_combined = merge_unique(df_sec_old, df_sec_new, "Section")
+        df_div_combined = merge_unique(df_div_old, df_div_new, "Division")
+        df_grp_combined = merge_unique(df_grp_old, df_grp_new, "Group")
+        df_cls_combined = merge_unique(df_cls_old, df_cls_new, "Class")
+
+        # =======================================
+        # 3. Выводим в Streamlit
+        # =======================================
         tab1, tab2, tab3, tab4 = st.tabs(["Sections", "Divisions", "Groups", "Classes"])
 
         with tab1:
-            st.dataframe(df_sec_new, use_container_width=True)
+            st.dataframe(df_sec_combined, use_container_width=True)
 
         with tab2:
-            st.dataframe(df_div_new, use_container_width=True)
+            st.dataframe(df_div_combined, use_container_width=True)
 
         with tab3:
-            st.dataframe(df_grp_new, use_container_width=True)
+            st.dataframe(df_grp_combined, use_container_width=True)
 
         with tab4:
-            st.dataframe(df_cls_new, use_container_width=True)
+            st.dataframe(df_cls_combined, use_container_width=True)
+
+        # Сохраняем в session_state для экспорта
+        st.session_state["dfs_combined"] = (
+            df_sec_combined,
+            df_div_combined,
+            df_grp_combined,
+            df_cls_combined,
+        )
 
         # -----------------------------------------
         # 2) Фильтрация сравнения

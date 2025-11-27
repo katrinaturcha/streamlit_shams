@@ -1,6 +1,7 @@
 import re
 import pandas as pd
 import math
+import unicodedata
 
 
 def split_en_ar(text):
@@ -84,8 +85,18 @@ def normalize_text_for_compare(s: str) -> str:
     """Нормализация текста для сравнения (tolower + только буквы/цифры)."""
     if pd.isna(s):
         return ""
-    s = str(s).lower()
-    return re.sub(r"[^a-z0-9]+", "", s)
+
+        # 1) приводим к строке
+    s = str(s)
+
+    # 2) нормализуем unicode (очищаем разные виды пробелов/точек)
+    s = unicodedata.normalize("NFKD", s)
+
+    # 3) убираем все символы кроме A-Z a-z 0-9
+    s = re.sub(r"[^A-Za-z0-9]+", "", s)
+
+    # 4) нижний регистр
+    return s.lower()
 
 
 def normalize_subclass_simple(code):
