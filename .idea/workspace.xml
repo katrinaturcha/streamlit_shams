@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="load files" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="compare shams subclass_en" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -101,7 +101,23 @@
       <option name="project" value="LOCAL" />
       <updated>1764226947151</updated>
     </task>
-    <option name="localTasksCounter" value="7" />
+    <task id="LOCAL-00007" summary="load files">
+      <option name="closed" value="true" />
+      <created>1764227267701</created>
+      <option name="number" value="00007" />
+      <option name="presentableId" value="LOCAL-00007" />
+      <option name="project" value="LOCAL" />
+      <updated>1764227267701</updated>
+    </task>
+    <task id="LOCAL-00008" summary="compare shams subclass_en">
+      <option name="closed" value="true" />
+      <created>1764227332176</created>
+      <option name="number" value="00008" />
+      <option name="presentableId" value="LOCAL-00008" />
+      <option name="project" value="LOCAL" />
+      <updated>1764227332176</updated>
+    </task>
+    <option name="localTasksCounter" value="9" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -109,6 +125,7 @@
     <MESSAGE value="alter compare" />
     <MESSAGE value="section, compare_shams" />
     <MESSAGE value="load files" />
-    <option name="LAST_COMMIT_MESSAGE" value="load files" />
+    <MESSAGE value="compare shams subclass_en" />
+    <option name="LAST_COMMIT_MESSAGE" value="compare shams subclass_en" />
   </component>
 </project>
