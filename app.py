@@ -186,9 +186,10 @@ if file_old and file_new:
             "Section_old", "Section_new",
             "Division_old", "Division_new",
             "Group_old", "Group_new",
+            "Group_en_old", "Group_en_new",
             "Class_old", "Class_new",
-            "Subclass_en_old", "Subclass_en_new",
-
+            "Class_en_old", "Class_en_new",
+            "Subclass_en_old", "Subclass_en_new"
             # динамические столбцы _new, если есть
         ]
 

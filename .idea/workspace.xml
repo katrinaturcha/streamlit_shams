@@ -4,8 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="alter compare">
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="section, compare_shams">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -79,12 +80,21 @@
       <option name="project" value="LOCAL" />
       <updated>1764224042440</updated>
     </task>
-    <option name="localTasksCounter" value="4" />
+    <task id="LOCAL-00004" summary="section, compare_shams">
+      <option name="closed" value="true" />
+      <created>1764225292484</created>
+      <option name="number" value="00004" />
+      <option name="presentableId" value="LOCAL-00004" />
+      <option name="project" value="LOCAL" />
+      <updated>1764225292484</updated>
+    </task>
+    <option name="localTasksCounter" value="5" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="first iter" />
     <MESSAGE value="alter compare" />
-    <option name="LAST_COMMIT_MESSAGE" value="alter compare" />
+    <MESSAGE value="section, compare_shams" />
+    <option name="LAST_COMMIT_MESSAGE" value="section, compare_shams" />
   </component>
 </project>
