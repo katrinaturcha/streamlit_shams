@@ -374,7 +374,7 @@ if file_old and file_new:
             # 2. Берём отфильтрованную таблицу сравнения
             # ----------------------------
             if "df_compare_filtered" not in st.session_state:
-                st.error("Ошибка: отсутствует df_filtered. Выполните Шаг 2.")
+                st.error("Ошибка: отсутствует df_compare_filtered. Выполните Шаг 2.")
                 st.stop()
 
             df_filtered = st.session_state["df_compare_filtered"]
