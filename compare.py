@@ -9,9 +9,9 @@ def compare_shams(df_old, df_new):
     df_old = df_old.copy()
     df_new = df_new.copy()
 
-    # нормализованный ключ
-    df_old["Subclass_norm"] = df_old["Subclass"].apply(normalize_subclass_simple)
-    df_new["Subclass_norm"] = df_new["Subclass"].apply(normalize_subclass_simple)
+    # нормализуем ключ
+    df_old["Subclass_norm"] = df_old["Subclass"].apply(normalize_subclass)
+    df_new["Subclass_norm"] = df_new["Subclass"].apply(normalize_subclass)
 
     df_old = df_old[df_old["Subclass_norm"].notna()]
     df_new = df_new[df_new["Subclass_norm"].notna()]
@@ -20,13 +20,16 @@ def compare_shams(df_old, df_new):
     df_old = df_old.add_suffix("_old")
     df_new = df_new.add_suffix("_new")
 
+    # вернуть имя ключа
     df_old = df_old.rename(columns={"Subclass_norm_old": "Subclass_norm"})
     df_new = df_new.rename(columns={"Subclass_norm_new": "Subclass_norm"})
 
-    # объединяем
+    # FULL JOIN
     df = pd.merge(df_old, df_new, on="Subclass_norm", how="outer", indicator=True)
 
-    # первичная классификация
+    # -------------------------------
+    # Первичное определение статуса
+    # -------------------------------
     def classify(row):
         if row["_merge"] == "left_only":
             return "deleted"
@@ -36,37 +39,30 @@ def compare_shams(df_old, df_new):
 
     df["status"] = df.apply(classify, axis=1)
 
-    # =========================================================
-    # сравниваем только англ. описания Group_en / Class_en / Subclass_en
-    # =========================================================
+    # -------------------------------
+    # Сравнение ТОЛЬКО Subclass_en
+    # -------------------------------
+    diff_list = []
 
-    english_pairs = [
-        ("Group_en_old", "Group_en_new"),
-        ("Class_en_old", "Class_en_new"),
-        ("Subclass_en_old", "Subclass_en_new"),
-    ]
-
-    diff_columns = []
-
-    for i, row in df.iterrows():
+    for _, row in df.iterrows():
         diffs = []
 
         if row["status"] == "potentially_changed":
-            for col_old, col_new in english_pairs:
+            old_val = normalize_text(row.get("Subclass_en_old", ""))
+            new_val = normalize_text(row.get("Subclass_en_new", ""))
 
-                old_val = normalize_text_for_compare(row.get(col_old))
-                new_val = normalize_text_for_compare(row.get(col_new))
+            if old_val != new_val:
+                diffs.append("Subclass_en")
 
-                if old_val != new_val:
-                    diffs.append(col_old.replace("_old", ""))
+        diff_list.append(diffs)
 
-        diff_columns.append(diffs)
+    df["diff_columns"] = diff_list
 
-    df["diff_columns"] = diff_columns
-
-    # финальный статус
+    # -------------------------------
+    # Финальный статус
+    # -------------------------------
     def final_status(row):
-        if row["status"] in ("deleted", "added"):
+        if row["status"] in ("added", "deleted"):
             return row["status"]
         if len(row["diff_columns"]) > 0:
             return "changed"
@@ -74,13 +70,13 @@ def compare_shams(df_old, df_new):
 
     df["status"] = df.apply(final_status, axis=1)
 
-    # порядок колонок
-    cols_front = ["Subclass_norm", "status", "diff_columns"]
-    other = [c for c in df.columns if c not in cols_front and c != "_merge"]
+    # -------------------------------
+    # Итоговый порядок
+    # -------------------------------
+    front_cols = ["Subclass_norm", "status", "diff_columns"]
+    other = [c for c in df.columns if c not in front_cols and c != "_merge"]
 
-    df = df[cols_front + other]
-
-    return df
+    return df[front_cols + other]
 
 
 def comparison_stats(df_compare: pd.DataFrame) -> pd.DataFrame:

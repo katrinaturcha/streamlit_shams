@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="section, compare_shams">
-      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-    </list>
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="load files" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -95,13 +93,22 @@
       <option name="project" value="LOCAL" />
       <updated>1764225882535</updated>
     </task>
-    <option name="localTasksCounter" value="6" />
+    <task id="LOCAL-00006" summary="load files">
+      <option name="closed" value="true" />
+      <created>1764226947151</created>
+      <option name="number" value="00006" />
+      <option name="presentableId" value="LOCAL-00006" />
+      <option name="project" value="LOCAL" />
+      <updated>1764226947151</updated>
+    </task>
+    <option name="localTasksCounter" value="7" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
     <MESSAGE value="first iter" />
     <MESSAGE value="alter compare" />
     <MESSAGE value="section, compare_shams" />
-    <option name="LAST_COMMIT_MESSAGE" value="section, compare_shams" />
+    <MESSAGE value="load files" />
+    <option name="LAST_COMMIT_MESSAGE" value="load files" />
   </component>
 </project>
