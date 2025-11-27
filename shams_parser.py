@@ -15,19 +15,48 @@ from utils import (
 BASE_COLS = {"part", "section", "division", "group", "class", "subclass", "description", "الوصف"}
 
 
-def detect_section(text_line: str):
-    """Определяет Section строки формата 'Section C: Trade'."""
+def detect_section(text_line):
+    """
+    Определяет Section строки формата:
+    - Section G: Retail...
+    - Section F Construction
+    - Section K: Finance Section K: Finance (мусор → оставляем только первое)
+
+    Возвращает: (Section_code, en_clean, ar_clean)
+    """
     if not isinstance(text_line, str):
         return None, None, None
 
-    m = re.match(r"^\s*section\s*([A-ZА-Я])\s*[:\-]?(.*)$", text_line, re.I)
-    if m:
-        letter = m.group(1).upper()
-        rest = (m.group(2) or "").strip()
-        en, ar = split_en_ar(rest)
-        return f"Section {letter}", en, ar
+    s = text_line.strip()
 
-    return None, None, None
+    # 1. Находим начало секции
+    m = re.match(r"^\s*section\s*([A-ZА-Я])\s*[:\-]?\s*(.*)$", s, re.I)
+    if not m:
+        return None, None, None
+
+    letter = m.group(1).upper()
+    rest = (m.group(2) or "").strip()
+
+    # 2. Убираем арабский блок (оставляем только английский)
+    rest_en, rest_ar = split_en_ar(rest)
+
+    if not rest_en:
+        rest_en = ""
+
+    # 3. Удаляем паразитный текст после первого корректного описания
+    #    удаляем всё после повторного "Section X"
+    rest_en = re.split(r"\bSection\s+[A-Z]\b", rest_en, flags=re.I)[0].strip()
+
+    # 4. Убираем предлоги, если строка начинается повторно с Section
+    #    и повторные метки выборки
+    rest_en = rest_en.replace("Division", "").replace("Group", "").replace("Class", "").replace("Description", "")
+    rest_en = re.sub(r"\s{2,}", " ", rest_en).strip()
+
+    # 5. Если после чистки строка пустая — лучше вернуть None
+    if rest_en == "":
+        rest_en = None
+
+    return f"Section {letter}", rest_en, rest_ar
 
 
 def detect_division(text_line: str):
