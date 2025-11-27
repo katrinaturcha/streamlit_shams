@@ -47,8 +47,7 @@ if file_old and file_new:
     st.dataframe(df_log, use_container_width=True)
 
     st.info(
-        "Кнопка ниже логически считает новый файл 'новым эталоном' в рамках этой сессии.\n"
-        "Физически файлы на диске не заменяются (вариант 2)."
+        "Кнопка ниже логически считает новый файл 'новым исходным файлом провайдера'.\n"
     )
 
     if st.button("Обновить изначальный файл провайдера (логически)"):
@@ -88,29 +87,132 @@ if file_old and file_new:
 
         st.subheader("2.1. Сравнение df_full_old и df_full_new")
 
+        # df_compare = compare_shams(df_full_old, df_full_new)
+        # st.session_state["df_compare"] = df_compare
+        #
+        # st.dataframe(df_compare, use_container_width=True)
         df_compare = compare_shams(df_full_old, df_full_new)
         st.session_state["df_compare"] = df_compare
 
-        st.dataframe(df_compare, use_container_width=True)
+        # -----------------------------------------
+        # 1) Показываем отдельные таблицы иерархии
+        # -----------------------------------------
+
+        st.subheader("2.1. Отдельные таблицы иерархии (новый файл)")
+
+        df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
+
+        tab1, tab2, tab3, tab4 = st.tabs(["Sections", "Divisions", "Groups", "Classes"])
+
+        with tab1:
+            st.dataframe(df_sec_new, use_container_width=True)
+
+        with tab2:
+            st.dataframe(df_div_new, use_container_width=True)
+
+        with tab3:
+            st.dataframe(df_grp_new, use_container_width=True)
+
+        with tab4:
+            st.dataframe(df_cls_new, use_container_width=True)
+
+        # -----------------------------------------
+        # 2) Фильтрация сравнения
+        # -----------------------------------------
+
+        st.subheader("2.2. Сравнение df_full_old и df_full_new (укороченный вид)")
+
+        df = df_compare.copy()
+
+        # оставляем только нужные столбцы
+        keep_cols = [
+            "Subclass_norm",
+            "status",
+            "diff_columns",
+            "Section_old", "Section_new",
+            "Division_old", "Division_new",
+            "Group_old", "Group_new",
+            "Class_old", "Class_new",
+            "Subclass_en_old", "Subclass_en_new",
+
+            # динамические столбцы _new, если есть
+        ]
+
+        # добавить динамические колонки (_new)
+        dynamic_new = [c for c in df.columns if c.endswith("_new") and any(
+            key in c.lower()
+            for key in ["authority", "approval", "date"]
+        )]
+
+        keep_cols.extend(dynamic_new)
+
+        # фильтрация
+        df_filtered = df[[c for c in keep_cols if c in df.columns]]
+        df_filtered = df_filtered.rename(columns={"Subclass_norm": "Subclass"})
+        st.dataframe(df_filtered, use_container_width=True)
+
+        # сохраняем
+        st.session_state["df_compare_filtered"] = df_filtered
 
         st.subheader("2.2. Статистика сравнения")
         stats = comparison_stats(df_compare)
         st.table(stats)
 
-        # Кнопки скачивания обработанных файлов
+        # ----------------------------------------------------------
+        # 2.3 ВЫГРУЗКА ОБРАБОТАННЫХ ФАЙЛОВ
+        # ----------------------------------------------------------
         st.subheader("2.3. Выгрузка обработанных файлов")
 
+        # Иерархические таблицы (старые / новые)
         df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
         df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
 
-        excel_old_bytes = make_processed_excel_bytes(
-            df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old
-        )
-        excel_new_bytes = make_processed_excel_bytes(
-            df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new
+
+        # ==========================================================
+        # Генерация Excel-файла для shams_raw1_edit и shams_raw2_edit
+        # ==========================================================
+        def generate_processed_excel(df_full, df_sec, df_div, df_grp, df_cls):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df_full.to_excel(writer, sheet_name="Full", index=False)
+                df_sec.to_excel(writer, sheet_name="Sections", index=False)
+                df_div.to_excel(writer, sheet_name="Divisions", index=False)
+                df_grp.to_excel(writer, sheet_name="Groups", index=False)
+                df_cls.to_excel(writer, sheet_name="Classes", index=False)
+            return output.getvalue()
+
+
+        excel_old_bytes = generate_processed_excel(df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old)
+        excel_new_bytes = generate_processed_excel(df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new)
+
+
+        # ==========================================================
+        # Генерация Excel-файла сравнения
+        # ==========================================================
+        def generate_compare_excel(df_filtered, df_sec, df_div, df_grp, df_cls):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df_filtered.to_excel(writer, sheet_name="Comparison", index=False)
+                df_sec.to_excel(writer, sheet_name="Sections", index=False)
+                df_div.to_excel(writer, sheet_name="Divisions", index=False)
+                df_grp.to_excel(writer, sheet_name="Groups", index=False)
+                df_cls.to_excel(writer, sheet_name="Classes", index=False)
+            return output.getvalue()
+
+
+        excel_compare_bytes = generate_compare_excel(
+            df_filtered,
+            df_sec_new,  # берем из нового (иерархия шлифована последним провайдером)
+            df_div_new,
+            df_grp_new,
+            df_cls_new,
         )
 
+        # ----------------------------------------------------------
+        # КНОПКИ
+        # ----------------------------------------------------------
         col_a, col_b, col_c = st.columns(3)
+
         with col_a:
             st.download_button(
                 "Скачать обработанный старый файл (shams_edit1 формат)",
@@ -118,6 +220,7 @@ if file_old and file_new:
                 file_name="shams_raw1_edit.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
         with col_b:
             st.download_button(
                 "Скачать обработанный новый файл (shams_raw2_edit формат)",
@@ -125,13 +228,11 @@ if file_old and file_new:
                 file_name="shams_raw2_edit.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
         with col_c:
-            compare_bytes = io.BytesIO()
-            df_compare.to_excel(compare_bytes, index=False)
-            compare_bytes.seek(0)
             st.download_button(
                 "Скачать результат сравнения (shams_compare.xlsx)",
-                data=compare_bytes,
+                data=excel_compare_bytes,
                 file_name="shams_compare.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
