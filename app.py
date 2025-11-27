@@ -27,34 +27,75 @@ with col1:
 with col2:
     file_new = st.file_uploader("Новый файл (shams2)", type=["xlsx"], key="file_new")
 
+# ============================================================
+# 1.1. Интерактивное сопоставление столбцов (как в Ajman)
+# ============================================================
+
 if file_old and file_new:
+
     data_old = file_old.read()
     data_new = file_new.read()
 
-    st.subheader("1.1. Сравнение структуры столбцов")
+    st.subheader("1.1. Сопоставление столбцов между shams и shams2")
 
-    headers_old, headers_new, df_log = build_header_change_log_from_bytes(data_old, data_new, SHEETS)
+    # ---------- 1) Получаем исходные заголовки ----------
+    headers_old, headers_new, df_log = build_header_change_log_from_bytes(
+        data_old, data_new, SHEETS
+    )
 
-    c1, c2 = st.columns(2)
-    with c1:
+    st.markdown("### Шаг 1 — автоматическое сравнение столбцов")
+    col1, col2 = st.columns(2)
+
+    with col1:
         st.markdown("**Заголовки старого файла (shams):**")
         st.write(headers_old)
-    with c2:
+
+    with col2:
         st.markdown("**Заголовки нового файла (shams2):**")
         st.write(headers_new)
 
     st.markdown("**Лог изменений столбцов:**")
     st.dataframe(df_log, use_container_width=True)
 
+    st.markdown("---")
+    st.markdown("### Шаг 2 — ручное сопоставление столбцов")
+
+    # ---------- 2) Создаём структуру сопоставлений ----------
+    if "column_mapping" not in st.session_state:
+        st.session_state["column_mapping"] = {col: None for col in headers_new}
+
+    mapping = st.session_state["column_mapping"]
+
     st.info(
-        "Кнопка ниже логически считает новый файл 'новым исходным файлом провайдера'.\n"
+        "Для каждого столбца из НОВОГО файла выберите, какой столбец ему соответствует в СТАРОМ файле.\n"
+        "Если новый столбец является новым и не имеет пары — оставьте пустым."
     )
 
-    if st.button("Обновить изначальный файл провайдера (логически)"):
-        st.session_state["baseline_set"] = True
-        st.success("Новый файл отмечен как актуальный эталон в этой сессии.")
+    # ---------- 3) Интерфейс сопоставления ----------
+    for col_new in headers_new:
+
+        st.write(f"**{col_new} →**")
+        mapped_col = st.selectbox(
+            f"Выберите соответствующий столбец для `{col_new}`",
+            options=["<нет соответствия>"] + headers_old,
+            index=(headers_old.index(mapping[col_new]) + 1) if mapping[col_new] in headers_old else 0,
+            key=f"map_{col_new}"
+        )
+
+        mapping[col_new] = None if mapped_col == "<нет соответствия>" else mapped_col
+
+    st.session_state["column_mapping"] = mapping
 
     st.markdown("---")
+    st.success("Сопоставление столбцов сохранено.")
+
+    # ---------- 4) Подтверждение ----------
+
+    st.markdown("### Шаг 3 — подтвердить выбор")
+    if st.button("Подтвердить сопоставление и перейти к обработке файлов"):
+        st.session_state["mapping_confirmed"] = True
+        st.success("Сопоставление колонок подтверждено! Теперь можно обрабатывать файлы.")
+        st.markdown("---")
 
     # =========================
     # ШАГ 2. Обработка файлов
