@@ -85,7 +85,7 @@ if file_old and file_new:
         df_full_old = st.session_state["df_full_old"]
         df_full_new = st.session_state["df_full_new"]
 
-        st.subheader("2.1. Сравнение df_full_old и df_full_new")
+        # st.subheader("2.1. Сравнение df_full_old и df_full_new")
 
         # df_compare = compare_shams(df_full_old, df_full_new)
         # st.session_state["df_compare"] = df_compare
@@ -186,10 +186,8 @@ if file_old and file_new:
             "Section_old", "Section_new",
             "Division_old", "Division_new",
             "Group_old", "Group_new",
-            "Group_en_old", "Group_en_new",
             "Class_old", "Class_new",
-            "Class_en_old", "Class_en_new",
-            "Subclass_en_old", "Subclass_en_new"
+            "Subclass_en_old", "Subclass_en_new",
             # динамические столбцы _new, если есть
         ]
 
@@ -213,64 +211,130 @@ if file_old and file_new:
         stats = comparison_stats(df_compare)
         st.table(stats)
 
-        # ----------------------------------------------------------
-        # 2.3 ВЫГРУЗКА ОБРАБОТАННЫХ ФАЙЛОВ
-        # ----------------------------------------------------------
         st.subheader("2.3. Выгрузка обработанных файлов")
 
-        # Иерархические таблицы (старые / новые)
+        # ==============================================
+        # Достаём таблицы из session_state
+        # ==============================================
         df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
         df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
+        df_sec_combined, df_div_combined, df_grp_combined, df_cls_combined = st.session_state["dfs_combined"]
 
 
-        # ==========================================================
-        # Генерация Excel-файла для shams_raw1_edit и shams_raw2_edit
-        # ==========================================================
-        def generate_processed_excel(df_full, df_sec, df_div, df_grp, df_cls):
+        # ------------------------------------------------------------
+        # 1. Функция: делаем листы ТОЛЬКО старые
+        # ------------------------------------------------------------
+        def keep_old_columns(df, key):
+            """
+            Оставляет только старые столбцы:
+            key | key_en_old | key_ar_old
+            """
+            cols = [key]
+            if f"{key}_en_old" in df.columns:
+                cols.append(f"{key}_en_old")
+            if f"{key}_ar_old" in df.columns:
+                cols.append(f"{key}_ar_old")
+            return df[cols]
+
+
+        # ------------------------------------------------------------
+        # 2. Функция: делаем листы ТОЛЬКО новые
+        # ------------------------------------------------------------
+        def keep_new_columns(df, key):
+            """
+            Оставляет только новые столбцы:
+            key | key_en_new | key_ar_new
+            """
+            cols = [key]
+            if f"{key}_en_new" in df.columns:
+                cols.append(f"{key}_en_new")
+            if f"{key}_ar_new" in df.columns:
+                cols.append(f"{key}_ar_new")
+            return df[cols]
+
+
+        # ------------------------------------------------------------
+        # 3. Функция: делаем объединённые листы (для сравнения)
+        # ------------------------------------------------------------
+        def keep_combined_columns(df_combined, key):
+            """
+            Объединённое множество из старых+новых:
+            key | key_en | key_ar
+            """
+            cols = [key, f"{key}_en", f"{key}_ar"]
+            existing_cols = [c for c in cols if c in df_combined.columns]
+            return df_combined[existing_cols]
+
+
+        # ------------------------------------------------------------
+        # 4. Генерация shams_edit1 (старый файл)
+        # ------------------------------------------------------------
+        def generate_shams_edit1(df_full, sec_old, div_old, grp_old, cls_old):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 df_full.to_excel(writer, sheet_name="Full", index=False)
-                df_sec.to_excel(writer, sheet_name="Sections", index=False)
-                df_div.to_excel(writer, sheet_name="Divisions", index=False)
-                df_grp.to_excel(writer, sheet_name="Groups", index=False)
-                df_cls.to_excel(writer, sheet_name="Classes", index=False)
+
+                keep_old_columns(sec_old, "Section").to_excel(writer, sheet_name="Sections", index=False)
+                keep_old_columns(div_old, "Division").to_excel(writer, sheet_name="Divisions", index=False)
+                keep_old_columns(grp_old, "Group").to_excel(writer, sheet_name="Groups", index=False)
+                keep_old_columns(cls_old, "Class").to_excel(writer, sheet_name="Classes", index=False)
+
             return output.getvalue()
 
 
-        excel_old_bytes = generate_processed_excel(df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old)
-        excel_new_bytes = generate_processed_excel(df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new)
+        # ------------------------------------------------------------
+        # 5. Генерация shams_edit2 (новый файл)
+        # ------------------------------------------------------------
+        def generate_shams_edit2(df_full, sec_new, div_new, grp_new, cls_new):
+            output = io.BytesIO()
+            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
+                df_full.to_excel(writer, sheet_name="Full", index=False)
+
+                keep_new_columns(sec_new, "Section").to_excel(writer, sheet_name="Sections", index=False)
+                keep_new_columns(div_new, "Division").to_excel(writer, sheet_name="Divisions", index=False)
+                keep_new_columns(grp_new, "Group").to_excel(writer, sheet_name="Groups", index=False)
+                keep_new_columns(cls_new, "Class").to_excel(writer, sheet_name="Classes", index=False)
+
+            return output.getvalue()
 
 
-        # ==========================================================
-        # Генерация Excel-файла сравнения
-        # ==========================================================
-        def generate_compare_excel(df_filtered, df_sec, df_div, df_grp, df_cls):
+        # ------------------------------------------------------------
+        # 6. Генерация shams_compare (объединённая иерархия)
+        # ------------------------------------------------------------
+        def generate_shams_compare(df_filtered, sec_cmb, div_cmb, grp_cmb, cls_cmb):
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
                 df_filtered.to_excel(writer, sheet_name="Comparison", index=False)
-                df_sec.to_excel(writer, sheet_name="Sections", index=False)
-                df_div.to_excel(writer, sheet_name="Divisions", index=False)
-                df_grp.to_excel(writer, sheet_name="Groups", index=False)
-                df_cls.to_excel(writer, sheet_name="Classes", index=False)
+
+                keep_combined_columns(sec_cmb, "Section").to_excel(writer, sheet_name="Sections", index=False)
+                keep_combined_columns(div_cmb, "Division").to_excel(writer, sheet_name="Divisions", index=False)
+                keep_combined_columns(grp_cmb, "Group").to_excel(writer, sheet_name="Groups", index=False)
+                keep_combined_columns(cls_cmb, "Class").to_excel(writer, sheet_name="Classes", index=False)
+
             return output.getvalue()
 
 
-        excel_compare_bytes = generate_compare_excel(
+        # ------------------------------------------------------------
+        # Формируем файлы
+        # ------------------------------------------------------------
+        excel_old_bytes = generate_shams_edit1(df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old)
+        excel_new_bytes = generate_shams_edit2(df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new)
+        excel_compare_bytes = generate_shams_compare(
             df_filtered,
-            df_sec_new,  # берем из нового (иерархия шлифована последним провайдером)
-            df_div_new,
-            df_grp_new,
-            df_cls_new,
+            df_sec_combined,
+            df_div_combined,
+            df_grp_combined,
+            df_cls_combined,
         )
 
-        # ----------------------------------------------------------
-        # КНОПКИ
-        # ----------------------------------------------------------
+        # ------------------------------------------------------------
+        # КНОПКИ СКАЧИВАНИЯ
+        # ------------------------------------------------------------
         col_a, col_b, col_c = st.columns(3)
 
         with col_a:
             st.download_button(
-                "Скачать обработанный старый файл (shams_edit1 формат)",
+                "Скачать обработанный старый файл (shams_edit1)",
                 data=excel_old_bytes,
                 file_name="shams_raw1_edit.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -278,7 +342,7 @@ if file_old and file_new:
 
         with col_b:
             st.download_button(
-                "Скачать обработанный новый файл (shams_raw2_edit формат)",
+                "Скачать обработанный новый файл (shams_edit2)",
                 data=excel_new_bytes,
                 file_name="shams_raw2_edit.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
