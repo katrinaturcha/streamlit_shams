@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="load files add description" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="compare columns" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -125,7 +125,15 @@
       <option name="project" value="LOCAL" />
       <updated>1764227977704</updated>
     </task>
-    <option name="localTasksCounter" value="10" />
+    <task id="LOCAL-00010" summary="compare columns">
+      <option name="closed" value="true" />
+      <created>1764228116897</created>
+      <option name="number" value="00010" />
+      <option name="presentableId" value="LOCAL-00010" />
+      <option name="project" value="LOCAL" />
+      <updated>1764228116897</updated>
+    </task>
+    <option name="localTasksCounter" value="11" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -135,6 +143,7 @@
     <MESSAGE value="load files" />
     <MESSAGE value="compare shams subclass_en" />
     <MESSAGE value="load files add description" />
-    <option name="LAST_COMMIT_MESSAGE" value="load files add description" />
+    <MESSAGE value="compare columns" />
+    <option name="LAST_COMMIT_MESSAGE" value="compare columns" />
   </component>
 </project>

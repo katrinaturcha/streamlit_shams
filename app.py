@@ -351,6 +351,10 @@ if file_old and file_new:
         # ШАГ 3. Присоединение shams_edit1
         # =========================
 
+        # ============================================================
+        # ШАГ 3 — Загрузка и присоединение shams_edit1.xlsx
+        # ============================================================
+
         st.header("Шаг 3. Загрузите первый отредактированный файл и присоедините его")
 
         edit_file = st.file_uploader(
@@ -360,21 +364,48 @@ if file_old and file_new:
         )
 
         if edit_file is not None:
+
+            # ----------------------------
+            # 1. Читаем файл shams_edit1
+            # ----------------------------
             df_edit = pd.read_excel(edit_file)
-            df_joined = join_with_edit(df_compare, df_edit)
+
+            # ----------------------------
+            # 2. Берём отфильтрованную таблицу сравнения
+            # ----------------------------
+            if "df_filtered" not in st.session_state:
+                st.error("Ошибка: отсутствует df_filtered. Выполните Шаг 2.")
+                st.stop()
+
+            df_filtered = st.session_state["df_filtered"]
+
+            # ----------------------------
+            # 3. Присоединяем df_edit → df_filtered
+            # ----------------------------
+            df_joined = join_with_edit(df_filtered, df_edit)
+
+            # сохраняем результат в session_state
             st.session_state["df_joined"] = df_joined
 
+            # ----------------------------
+            # 4. Вывод результата
+            # ----------------------------
             st.subheader("3.1. Итоговая таблица с присоединённым shams_edit1")
             st.dataframe(df_joined, use_container_width=True)
 
+            # ----------------------------
+            # 5. Кнопка скачать Excel
+            # ----------------------------
             joined_bytes = io.BytesIO()
             df_joined.to_excel(joined_bytes, index=False)
             joined_bytes.seek(0)
+
             st.download_button(
-                "Скачать итоговую таблицу (Excel)",
+                "Скачать итоговую таблицу (shams_joined.xlsx) для последующего перевода и редактивания в Google Sheets",
                 data=joined_bytes,
                 file_name="shams_joined.xlsx",
                 mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
             )
+
 else:
     st.info("Загрузите оба файла (старый и новый), чтобы начать.")
