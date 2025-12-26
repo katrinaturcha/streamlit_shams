@@ -3,7 +3,8 @@ import pandas as pd
 from pathlib import Path
 
 from header_log import build_header_change_log_from_bytes
-
+from shams_parser import parse_all_sheets_from_bytes
+from compare import compare_shams, comparison_stats
 
 # ================= CONFIG =================
 st.set_page_config(layout="wide")
@@ -199,4 +200,73 @@ if st.session_state.stage == "mapping":
     with col2:
         if st.button("Подтвердить сопоставление"):
             st.session_state.stage = "compare"
+            st.rerun()
+
+if st.session_state.stage == "compare":
+
+    st.subheader("Статистика сравнения")
+
+    # === 1. Парсинг обоих файлов (ЛОГИКА СОХРАНЕНА) ===
+    data_old = st.session_state.shams_bytes
+    data_new = st.session_state.shams2_bytes
+
+    (
+        df_full_old,
+        df_sec_old,
+        df_div_old,
+        df_grp_old,
+        df_cls_old,
+        df_sub_old,
+    ) = parse_all_sheets_from_bytes(data_old, sheets=None)
+
+    (
+        df_full_new,
+        df_sec_new,
+        df_div_new,
+        df_grp_new,
+        df_cls_new,
+        df_sub_new,
+    ) = parse_all_sheets_from_bytes(data_new, sheets=None)
+
+    # сохраняем — пригодится для БД и экспорта
+    st.session_state["df_full_old"] = df_full_old
+    st.session_state["df_full_new"] = df_full_new
+    st.session_state["dfs_old"] = (df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old)
+    st.session_state["dfs_new"] = (df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new)
+
+    # === 2. Сравнение ===
+    df_compare = compare_shams(df_full_old, df_full_new)
+    st.session_state["df_compare"] = df_compare
+
+    # === 3. Статистика (КЛЮЧЕВОЙ UI) ===
+    stats_df = comparison_stats(df_compare)
+    st.session_state["compare_stats"] = stats_df
+
+    # преобразуем в словарь для красивого вывода
+    stats = dict(zip(stats_df["metric"], stats_df["value"]))
+
+    st.markdown(
+        f"""
+        **Количество активити в старом файле:** {stats['Количество строк в старом файле']}  
+        **Количество активити в новом файле:** {stats['Количество строк в новом файле']}  
+        **Добавлено активити:** {stats['Добавлено']}  
+        **Удалено активити:** {stats['Удалено']}  
+        **Внесены изменения:** {stats['Изменено (по английским описаниям)']}  
+        **Остались без изменений:** {stats['Не изменено']}  
+        """
+    )
+
+    st.markdown("---")
+
+    # === 4. Кнопки управления ===
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Отменить"):
+            st.session_state.stage = "mapping"
+            st.rerun()
+
+    with col2:
+        if st.button("Актуализировать в БД", type="primary"):
+            st.session_state.stage = "db_update"
             st.rerun()
