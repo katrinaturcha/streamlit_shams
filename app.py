@@ -109,26 +109,29 @@ if st.session_state.activity_tab == "Список":
 # ==================================================
 @st.dialog("Укажите новый источник")
 def step_1_upload():
+
     uploaded = st.file_uploader(
         "Загрузите новый файл (shams2)",
         type=["xlsx"],
         key="upload_shams2"
     )
 
-    # ВАЖНО: читаем bytes только один раз и сохраняем
-    if uploaded is not None:
+    # ✅ читаем файл ТОЛЬКО ОДИН РАЗ
+    if uploaded is not None and "shams2_bytes" not in st.session_state:
         st.session_state.shams2_bytes = uploaded.read()
 
     col1, col2 = st.columns(2)
+
     with col1:
         st.button("Отменить", on_click=cancel_steps)
 
     with col2:
         st.button(
             "Применить",
-            disabled=st.session_state.shams2_bytes is None,
+            disabled="shams2_bytes" not in st.session_state,
             on_click=lambda: set_step(2)
         )
+
 
 
 if st.session_state.step == 1:
@@ -168,19 +171,28 @@ def step_2_select_new_headers():
     if st.session_state.headers_new_selected is None:
         st.session_state.headers_new_selected = list(headers_new)
 
-    selected = []
+    if st.session_state.headers_new_selected is None:
+        st.session_state.headers_new_selected = list(headers_new)
 
-    # Чекбоксы (можно компактно в 2 колонки)
     left, right = st.columns(2)
-    for i, col in enumerate(headers_new):
-        default_checked = col in st.session_state.headers_new_selected
-        target_col = left if i % 2 == 0 else right
-        with target_col:
-            checked = st.checkbox(col, value=default_checked, key=f"chk_new_{col}")
-        if checked:
-            selected.append(col)
 
-    st.session_state.headers_new_selected = selected
+    for i, col in enumerate(headers_new):
+        target_col = left if i % 2 == 0 else right
+
+        with target_col:
+            checked = st.checkbox(
+                col,
+                value=col in st.session_state.headers_new_selected,
+                key=f"chk_new_{col}"
+            )
+
+        # 🔑 обновляем session_state сразу
+        if checked and col not in st.session_state.headers_new_selected:
+            st.session_state.headers_new_selected.append(col)
+
+        if not checked and col in st.session_state.headers_new_selected:
+            st.session_state.headers_new_selected.remove(col)
+
 
     c1, c2 = st.columns(2)
     with c1:
@@ -189,7 +201,7 @@ def step_2_select_new_headers():
     with c2:
         st.button(
             "Перейти к сопоставлению",
-            disabled=len(selected) == 0,
+            disabled=len(st.session_state.headers_new_selected) == 0,
             on_click=lambda: set_step(3)
         )
 
