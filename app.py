@@ -1,5 +1,4 @@
 import streamlit as st
-import pandas as pd
 from pathlib import Path
 
 from header_log import build_header_change_log_from_bytes
@@ -269,7 +268,7 @@ if st.session_state.stage == "compare":
 
     with col2:
         if st.button("Актуализировать в БД", type="primary"):
-            st.session_state.stage = "db_update"
+            st.session_state.stage = "db_mapping"
             st.rerun()
 
 if st.session_state.stage == "db_mapping":
