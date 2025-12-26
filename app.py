@@ -1,6 +1,5 @@
 import streamlit as st
 import pandas as pd
-import io
 from pathlib import Path
 
 from shams_parser import parse_all_sheets_from_bytes
@@ -31,10 +30,8 @@ DEFAULT_STATE = {
     "headers_new": None,
     "header_log": None,
 
+    "headers_new_selected": None,     # <--- ВАЖНО: выбор чекбоксов
     "column_mapping": None,
-
-    "df_old_parsed": None,
-    "df_new_parsed": None,
 
     "compare_df": None,
     "compare_stats": None,
@@ -43,6 +40,21 @@ DEFAULT_STATE = {
 for k, v in DEFAULT_STATE.items():
     if k not in st.session_state:
         st.session_state[k] = v
+
+
+# ===================== HELPERS =====================
+def set_step(n):
+    st.session_state.step = n
+
+
+def cancel_steps():
+    st.session_state.step = None
+
+
+def load_base_shams_bytes():
+    if st.session_state.shams_bytes is None:
+        with open(SHAMS_PATH, "rb") as f:
+            st.session_state.shams_bytes = f.read()
 
 
 # ===================== SIDEBAR =====================
@@ -62,12 +74,15 @@ if st.session_state.activity_tab == "Общее":
     st.markdown("## Общее про активити провайдера")
 
     st.markdown("### Источник текущего списка видов деятельности")
+    st.write("файл: xls, html, pdf")
+    st.caption("актуализирован 09.12.2025")
 
     with open(SHAMS_PATH, "rb") as f:
         st.download_button(
             "Скачать shams.xlsx",
             data=f,
-            file_name="shams.xlsx"
+            file_name="shams.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
 
@@ -77,41 +92,43 @@ if st.session_state.activity_tab == "Общее":
 if st.session_state.activity_tab == "Список":
     st.markdown("## Список активити провайдера")
 
-    if st.button("Актуализировать", type="primary"):
-        st.session_state.step = 1
+    c1, c2, c3, c4 = st.columns([1, 1, 4, 1])
+    with c1:
+        st.button("Импорт", disabled=True)
+    with c2:
+        st.button("Экспорт", disabled=True)
+    with c4:
+        st.button("Актуализировать", type="primary", on_click=lambda: set_step(1))
+
+    st.divider()
+    st.info("Нет данных")
 
 
 # ==================================================
 # ===================== STEP 1 =====================
 # ==================================================
-def apply_new_source():
-    st.session_state.step = 2
-
-
 @st.dialog("Укажите новый источник")
 def step_1_upload():
-
     uploaded = st.file_uploader(
         "Загрузите новый файл (shams2)",
         type=["xlsx"],
         key="upload_shams2"
     )
 
+    # ВАЖНО: читаем bytes только один раз и сохраняем
     if uploaded is not None:
         st.session_state.shams2_bytes = uploaded.read()
 
     col1, col2 = st.columns(2)
-
     with col1:
-        st.button("Отменить", on_click=lambda: st.session_state.update(step=None))
+        st.button("Отменить", on_click=cancel_steps)
 
     with col2:
         st.button(
             "Применить",
-            disabled="shams2_bytes" not in st.session_state,
-            on_click=apply_new_source
+            disabled=st.session_state.shams2_bytes is None,
+            on_click=lambda: set_step(2)
         )
-
 
 
 if st.session_state.step == 1:
@@ -121,8 +138,9 @@ if st.session_state.step == 1:
 # ==================================================
 # ===================== STEP 2 =====================
 # ==================================================
-@st.dialog("Шаг 1 — автоматическое сравнение столбцов")
-def step_2_auto_header_compare():
+@st.dialog("Шаг 1 — выбор столбцов нового файла (shams2)")
+def step_2_select_new_headers():
+    load_base_shams_bytes()
 
     headers_old, headers_new, log_df = build_header_change_log_from_bytes(
         st.session_state.shams_bytes,
@@ -134,23 +152,50 @@ def step_2_auto_header_compare():
     st.session_state.headers_new = headers_new
     st.session_state.header_log = log_df
 
-    col1, col2 = st.columns(2)
-    with col1:
-        st.markdown("**Заголовки старого файла (shams):**")
-        st.write(headers_old)
-    with col2:
-        st.markdown("**Заголовки нового файла (shams2):**")
-        st.write(headers_new)
+    # -----------------------------
+    # ВЫВОД старого файла и лога — УБРАН (по твоей просьбе)
+    # -----------------------------
+    # st.markdown("### Заголовки старого файла (shams):")
+    # st.write(headers_old)
+    #
+    # st.markdown("### Лог изменений столбцов:")
+    # st.dataframe(log_df, use_container_width=True)
 
-    st.markdown("**Лог изменений столбцов:**")
-    st.dataframe(log_df, use_container_width=True)
+    st.markdown("### Заголовки нового файла (shams2)")
+    st.caption("Отметьте галочками столбцы, которые пойдут в сопоставление.")
 
-    if st.button("Перейти к сопоставлению"):
-        st.session_state.step = 3
+    # Инициализация выбранных (по умолчанию: все)
+    if st.session_state.headers_new_selected is None:
+        st.session_state.headers_new_selected = list(headers_new)
+
+    selected = []
+
+    # Чекбоксы (можно компактно в 2 колонки)
+    left, right = st.columns(2)
+    for i, col in enumerate(headers_new):
+        default_checked = col in st.session_state.headers_new_selected
+        target_col = left if i % 2 == 0 else right
+        with target_col:
+            checked = st.checkbox(col, value=default_checked, key=f"chk_new_{col}")
+        if checked:
+            selected.append(col)
+
+    st.session_state.headers_new_selected = selected
+
+    c1, c2 = st.columns(2)
+    with c1:
+        st.button("Отменить", on_click=cancel_steps)
+
+    with c2:
+        st.button(
+            "Перейти к сопоставлению",
+            disabled=len(selected) == 0,
+            on_click=lambda: set_step(3)
+        )
 
 
 if st.session_state.step == 2:
-    step_2_auto_header_compare()
+    step_2_select_new_headers()
 
 
 # ==================================================
@@ -158,36 +203,55 @@ if st.session_state.step == 2:
 # ==================================================
 @st.dialog("Шаг 2 — ручное сопоставление столбцов")
 def step_3_manual_mapping():
+    headers_old = st.session_state.headers_old or []
+    headers_new_selected = st.session_state.headers_new_selected or []
 
+    # ВАЖНО: маппинг создаём/храним ТОЛЬКО для выбранных столбцов нового файла
     if st.session_state.column_mapping is None:
-        st.session_state.column_mapping = {
-            col: None for col in st.session_state.headers_new
-        }
+        st.session_state.column_mapping = {col: None for col in headers_new_selected}
+    else:
+        # если пользователь поменял галочки на шаге 2 — синхронизируем mapping
+        mapping = dict(st.session_state.column_mapping)
+        mapping = {k: v for k, v in mapping.items() if k in headers_new_selected}
+        for k in headers_new_selected:
+            mapping.setdefault(k, None)
+        st.session_state.column_mapping = mapping
 
     mapping = st.session_state.column_mapping
 
     st.info(
-        "Для каждого столбца из НОВОГО файла выберите соответствие в СТАРОМ файле "
-        "или оставьте пустым."
+        "Для каждого выбранного столбца из НОВОГО файла выберите соответствующий столбец в СТАРОМ файле.\n"
+        "Если пары нет — оставьте <нет соответствия>."
     )
 
-    for col_new in st.session_state.headers_new:
-        selected = st.selectbox(
-            f"{col_new} →",
-            ["<нет соответствия>"] + st.session_state.headers_old,
-            index=(
-                st.session_state.headers_old.index(mapping[col_new]) + 1
-                if mapping[col_new] in st.session_state.headers_old
-                else 0
-            ),
+    for col_new in headers_new_selected:
+        st.write(f"**{col_new} →**")
+
+        opts = ["<нет соответствия>"] + headers_old
+        current = mapping.get(col_new)
+
+        if current in headers_old:
+            idx = headers_old.index(current) + 1
+        else:
+            idx = 0
+
+        mapped_col = st.selectbox(
+            f"Выберите соответствующий столбец для `{col_new}`",
+            options=opts,
+            index=idx,
             key=f"map_{col_new}"
         )
-        mapping[col_new] = None if selected == "<нет соответствия>" else selected
+
+        mapping[col_new] = None if mapped_col == "<нет соответствия>" else mapped_col
 
     st.session_state.column_mapping = mapping
 
-    if st.button("Запустить сравнение данных"):
-        st.session_state.step = 4
+    c1, c2 = st.columns(2)
+    with c1:
+        st.button("Отменить", on_click=cancel_steps)
+
+    with c2:
+        st.button("Запустить сравнение данных", on_click=lambda: set_step(4))
 
 
 if st.session_state.step == 3:
@@ -199,23 +263,27 @@ if st.session_state.step == 3:
 # ==================================================
 @st.dialog("Сравнение данных и статистика")
 def step_4_parse_and_compare():
+    load_base_shams_bytes()
 
-    # парсинг
-    df_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
-    df_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
+    # Парсим оба сырых файла
+    df_old_full, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
+    df_new_full, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
 
-    # сравнение
-    compare_df = compare_shams(df_old, df_new)
-    stats_df = comparison_stats(compare_df)
+    # Сравнение (как в compare.py)
+    df_compare = compare_shams(df_old_full, df_new_full)
+    stats_df = comparison_stats(df_compare)
 
-    st.session_state.compare_df = compare_df
+    st.session_state.compare_df = df_compare
     st.session_state.compare_stats = stats_df
 
     st.markdown("### Статистика")
     st.dataframe(stats_df, use_container_width=True)
 
-    if st.button("Готово"):
-        st.session_state.step = None
+    c1, c2 = st.columns(2)
+    with c1:
+        st.button("Отменить", on_click=cancel_steps)
+    with c2:
+        st.button("Готово", on_click=cancel_steps)
 
 
 if st.session_state.step == 4:
