@@ -1,6 +1,8 @@
-import pandas as pd
-from utils import normalize_text_for_compare, normalize_subclass_simple
 import re
+import pandas as pd
+
+from utils import normalize_text_for_compare, normalize_subclass_simple
+
 
 def compare_shams(
     df_old: pd.DataFrame,
@@ -19,8 +21,8 @@ def compare_shams(
     Логика:
     - Subclass_en сравнивается ВСЕГДА
     - если old_col != None → сравниваем old vs new
-    - если old_col == None → колонка считается новой и
-      просто добавляется как <col>_new
+    - если old_col == None → колонка считается новой
+      и просто добавляется как <col>_new
     """
 
     # ==================================================
@@ -38,8 +40,8 @@ def compare_shams(
     # ==================================================
     # 2. Разделяем выбранные колонки
     # ==================================================
-    mapped_pairs = []     # (old_col, new_col)
-    new_only_cols = []    # new_col без пары
+    mapped_pairs = []   # (old_col, new_col)
+    new_only_cols = [] # new_col без пары
 
     for new_col, old_col in column_mapping.items():
         if old_col:
@@ -47,7 +49,6 @@ def compare_shams(
         else:
             new_only_cols.append(new_col)
 
-    # Subclass_en — базовая колонка
     BASE_COMPARE_COL = "Subclass_en"
 
     # ==================================================
@@ -94,7 +95,7 @@ def compare_shams(
             new_val = normalize_text_for_compare(row.get("Subclass_en_new", ""))
 
             if old_val != new_val:
-                diffs.append("Subclass_en")
+                diffs.append(BASE_COMPARE_COL)
 
             # --- сопоставленные колонки ---
             for old_col, new_col in mapped_pairs:
@@ -149,6 +150,88 @@ def compare_shams(
     final_cols = [c for c in final_cols if c in df.columns]
 
     return df[final_cols]
+
+
+# ==================================================
+# ================== STATS =========================
+# ==================================================
+def comparison_stats(df_compare: pd.DataFrame) -> pd.DataFrame:
+    total_old = df_compare["status"].isin(
+        ["not changed", "changed", "deleted"]
+    ).sum()
+    total_new = df_compare["status"].isin(
+        ["not changed", "changed", "added"]
+    ).sum()
+
+    added = (df_compare["status"] == "added").sum()
+    deleted = (df_compare["status"] == "deleted").sum()
+    changed = (df_compare["status"] == "changed").sum()
+    not_changed = (df_compare["status"] == "not changed").sum()
+
+    stats = pd.DataFrame(
+        {
+            "metric": [
+                "Количество строк в старом файле",
+                "Количество строк в новом файле",
+                "Добавлено",
+                "Удалено",
+                "Изменено (по английским описаниям)",
+                "Не изменено",
+            ],
+            "value": [
+                total_old,
+                total_new,
+                added,
+                deleted,
+                changed,
+                not_changed,
+            ],
+        }
+    )
+    return stats
+
+
+# ==================================================
+# ============== JOIN WITH EDIT ====================
+# ==================================================
+def join_with_edit(
+    df_compare: pd.DataFrame,
+    df_edit: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Присоединяет shams_edit.xlsx к df_compare
+    по нормализованному Subclass.
+
+    В df_edit ключевой столбец:
+    'Введите код бизнес-деятельности'
+    """
+
+    df_compare = df_compare.copy()
+    df_compare["Subclass"] = df_compare["Subclass"].astype(str)
+
+    df_edit = df_edit.copy()
+
+    def normalize_subclass(code):
+        if pd.isna(code):
+            return None
+        s = re.sub(r"[^0-9]", "", str(code))
+        if len(s) < 5:
+            return None
+        return f"{s[:4]}.{s[4:].ljust(2, '0')[:2]}"
+
+    df_edit["Subclass"] = df_edit["Введите код бизнес-деятельности"].apply(
+        normalize_subclass
+    )
+    df_edit["Subclass"] = df_edit["Subclass"].astype(str)
+
+    # суффиксы для избежания конфликтов
+    df_edit = df_edit.add_suffix("_edit")
+    df_edit = df_edit.rename(columns={"Subclass_edit": "Subclass"})
+
+    df_joined = df_compare.merge(df_edit, on="Subclass", how="left")
+
+    return df_joined
+
 
 
 
@@ -227,78 +310,78 @@ def compare_shams(
 #     return df[front_cols + other]
 
 
-def comparison_stats(df_compare: pd.DataFrame) -> pd.DataFrame:
-    total_old = df_compare["status"].isin(["not changed", "changed", "deleted"]).sum()
-    total_new = df_compare["status"].isin(["not changed", "changed", "added"]).sum()
-
-    added = (df_compare["status"] == "added").sum()
-    deleted = (df_compare["status"] == "deleted").sum()
-    changed = (df_compare["status"] == "changed").sum()
-    not_changed = (df_compare["status"] == "not changed").sum()
-
-    stats = pd.DataFrame({
-        "metric": [
-            "Количество строк в старом файле",
-            "Количество строк в новом файле",
-            "Добавлено",
-            "Удалено",
-            "Изменено (по английским описаниям)",
-            "Не изменено",
-        ],
-        "value": [
-            total_old,
-            total_new,
-            added,
-            deleted,
-            changed,
-            not_changed,
-        ],
-    })
-    return stats
-
-def join_with_edit(
-    df_compare: pd.DataFrame,
-    df_edit: pd.DataFrame,
-    selected_cols: list[str],
-) -> pd.DataFrame:
-    """
-    Присоединяет выбранные столбцы из shams_edit.xlsx
-    к df_compare по Subclass_code.
-    """
-
-    df_compare = df_compare.copy()
-    df_edit = df_edit.copy()
-
-    # --- нормализация ключа в edit ---
-    def normalize_subclass(code):
-        if pd.isna(code):
-            return None
-        s = re.sub(r"[^0-9]", "", str(code))
-        if len(s) < 5:
-            return None
-        return f"{s[:4]}.{s[4:].ljust(2, '0')[:2]}"
-
-    df_edit["Subclass_code"] = (
-        df_edit["Введите код бизнес-деятельности"]
-        .apply(normalize_subclass)
-    )
-
-    # --- оставляем только выбранные колонки + ключ ---
-    keep_cols = ["Subclass_code"] + selected_cols
-    df_edit = df_edit[keep_cols]
-
-    # --- суффикс ---
-    df_edit = df_edit.add_suffix("_edit")
-    df_edit = df_edit.rename(columns={"Subclass_code_edit": "Subclass_code"})
-
-    # --- join ---
-    df_joined = df_compare.merge(
-        df_edit,
-        on="Subclass_code",
-        how="left"
-    )
-
-    return df_joined
+# def comparison_stats(df_compare: pd.DataFrame) -> pd.DataFrame:
+#     total_old = df_compare["status"].isin(["not changed", "changed", "deleted"]).sum()
+#     total_new = df_compare["status"].isin(["not changed", "changed", "added"]).sum()
+#
+#     added = (df_compare["status"] == "added").sum()
+#     deleted = (df_compare["status"] == "deleted").sum()
+#     changed = (df_compare["status"] == "changed").sum()
+#     not_changed = (df_compare["status"] == "not changed").sum()
+#
+#     stats = pd.DataFrame({
+#         "metric": [
+#             "Количество строк в старом файле",
+#             "Количество строк в новом файле",
+#             "Добавлено",
+#             "Удалено",
+#             "Изменено (по английским описаниям)",
+#             "Не изменено",
+#         ],
+#         "value": [
+#             total_old,
+#             total_new,
+#             added,
+#             deleted,
+#             changed,
+#             not_changed,
+#         ],
+#     })
+#     return stats
+#
+# def join_with_edit(
+#     df_compare: pd.DataFrame,
+#     df_edit: pd.DataFrame,
+#     selected_cols: list[str],
+# ) -> pd.DataFrame:
+#     """
+#     Присоединяет выбранные столбцы из shams_edit.xlsx
+#     к df_compare по Subclass_code.
+#     """
+#
+#     df_compare = df_compare.copy()
+#     df_edit = df_edit.copy()
+#
+#     # --- нормализация ключа в edit ---
+#     def normalize_subclass(code):
+#         if pd.isna(code):
+#             return None
+#         s = re.sub(r"[^0-9]", "", str(code))
+#         if len(s) < 5:
+#             return None
+#         return f"{s[:4]}.{s[4:].ljust(2, '0')[:2]}"
+#
+#     df_edit["Subclass_code"] = (
+#         df_edit["Введите код бизнес-деятельности"]
+#         .apply(normalize_subclass)
+#     )
+#
+#     # --- оставляем только выбранные колонки + ключ ---
+#     keep_cols = ["Subclass_code"] + selected_cols
+#     df_edit = df_edit[keep_cols]
+#
+#     # --- суффикс ---
+#     df_edit = df_edit.add_suffix("_edit")
+#     df_edit = df_edit.rename(columns={"Subclass_code_edit": "Subclass_code"})
+#
+#     # --- join ---
+#     df_joined = df_compare.merge(
+#         df_edit,
+#         on="Subclass_code",
+#         how="left"
+#     )
+#
+#     return df_joined
 
 # def join_with_edit(df_compare: pd.DataFrame, df_edit: pd.DataFrame) -> pd.DataFrame:
 #     """
