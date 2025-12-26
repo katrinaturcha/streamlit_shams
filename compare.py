@@ -57,8 +57,8 @@ def compare_shams(
     df_old = df_old.add_suffix("_old")
     df_new = df_new.add_suffix("_new")
 
-    df_old = df_old.rename(columns={"Subclass_norm_old": "Subclass_code"})
-    df_new = df_new.rename(columns={"Subclass_norm_new": "Subclass_code"})
+    df_old = df_old.rename(columns={"Subclass_code_old": "Subclass_code"})
+    df_new = df_new.rename(columns={"Subclass_code_new": "Subclass_code"})
 
     df = pd.merge(
         df_old,
