@@ -5,28 +5,38 @@ from pathlib import Path
 
 from shams_parser import parse_all_sheets_from_bytes
 from compare import compare_shams, comparison_stats
+from header_log import build_header_change_log_from_bytes
 
 
 # ===================== CONFIG =====================
 st.set_page_config(layout="wide")
 
 BASE_DIR = Path(__file__).resolve().parent
-BASE_FILE_PATH = BASE_DIR / "shams.xlsx"
+SHAMS_PATH = BASE_DIR / "shams.xlsx"
 
-if not BASE_FILE_PATH.exists():
-    st.error(f"Файл shams.xlsx не найден: {BASE_FILE_PATH}")
+if not SHAMS_PATH.exists():
+    st.error("Файл shams.xlsx не найден в проекте")
     st.stop()
 
 
 # ===================== SESSION STATE =====================
 DEFAULT_STATE = {
-    "activity_tab": "Общее",
+    "activity_tab": "Список",
     "step": None,
-    "new_file": None,
-    "selected_columns": None,
-    "parsed_old": None,
-    "parsed_new": None,
-    "compare_result": None,
+
+    "shams_bytes": None,
+    "shams2_bytes": None,
+
+    "headers_old": None,
+    "headers_new": None,
+    "header_log": None,
+
+    "column_mapping": None,
+
+    "df_old_parsed": None,
+    "df_new_parsed": None,
+
+    "compare_df": None,
     "compare_stats": None,
 }
 
@@ -51,23 +61,13 @@ with st.sidebar:
 if st.session_state.activity_tab == "Общее":
     st.markdown("## Общее про активити провайдера")
 
-    col1, col2 = st.columns([1, 2])
-    with col1:
-        st.checkbox("Провайдер разрешает активити группы")
-        st.checkbox("Провайдер разрешает активити классы")
-        st.checkbox("Можно совмещать в пределах класса", value=True)
-        st.checkbox("Можно совмещать классы (с одинаковым типом лицензии)")
-
     st.markdown("### Источник текущего списка видов деятельности")
-    st.write("файл: xls, html, pdf")
-    st.caption("актуализирован 09.12.2025")
 
-    with open(BASE_FILE_PATH, "rb") as f:
+    with open(SHAMS_PATH, "rb") as f:
         st.download_button(
-            "Скачать",
+            "Скачать shams.xlsx",
             data=f,
-            file_name="shams.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            file_name="shams.xlsx"
         )
 
 
@@ -77,197 +77,141 @@ if st.session_state.activity_tab == "Общее":
 if st.session_state.activity_tab == "Список":
     st.markdown("## Список активити провайдера")
 
-    c1, c2, c3, c4 = st.columns([1, 1, 4, 1])
-    with c1:
-        st.button("Импорт", disabled=True)
-    with c2:
-        st.button("Экспорт", disabled=True)
-    with c4:
-        if st.button("Актуализировать", type="primary"):
-            st.session_state.step = 1
-
-    st.divider()
-    st.info("Нет данных")
+    if st.button("Актуализировать", type="primary"):
+        st.session_state.step = 1
 
 
 # ==================================================
 # ===================== STEP 1 =====================
 # ==================================================
 @st.dialog("Укажите новый источник")
-def dialog_upload_file():
+def step_1_upload():
 
     uploaded = st.file_uploader(
-        "Перетащите сюда файл или загрузите",
-        type=["xlsx"],
-        key="upload_new_source"
+        "Загрузите новый файл (shams2)",
+        type=["xlsx"]
     )
 
     if uploaded is not None:
-        st.session_state.new_file_bytes = uploaded.read()
+        st.session_state.shams2_bytes = uploaded.read()
 
-    c1, c2 = st.columns(2)
-
-    with c1:
+    col1, col2 = st.columns(2)
+    with col1:
         if st.button("Отменить"):
             st.session_state.step = None
-
-    with c2:
+    with col2:
         if st.button(
             "Применить",
-            disabled="new_file_bytes" not in st.session_state
+            disabled=st.session_state.shams2_bytes is None
         ):
+            with open(SHAMS_PATH, "rb") as f:
+                st.session_state.shams_bytes = f.read()
             st.session_state.step = 2
 
 
-
-
 if st.session_state.step == 1:
-    dialog_upload_file()
+    step_1_upload()
 
 
 # ==================================================
 # ===================== STEP 2 =====================
 # ==================================================
-@st.dialog("Выберите данные нового источника для сравнения")
-def dialog_select_columns_from_parsed():
+@st.dialog("Шаг 1 — автоматическое сравнение столбцов")
+def step_2_auto_header_compare():
 
-    import io
-
-    # === 1. Берём bytes нового файла ===
-    new_bytes = st.session_state.new_file_bytes
-
-    new_xls = pd.ExcelFile(io.BytesIO(new_bytes))
-    new_sheets = new_xls.sheet_names
-
-    df_new_full, *_ = parse_all_sheets_from_bytes(
-        new_bytes,
-        sheets=new_sheets
+    headers_old, headers_new, log_df = build_header_change_log_from_bytes(
+        st.session_state.shams_bytes,
+        st.session_state.shams2_bytes,
+        sheets=None
     )
 
-    # === 4. Сохраняем обработанный результат ===
-    st.session_state.parsed_new = df_new_full
+    st.session_state.headers_old = headers_old
+    st.session_state.headers_new = headers_new
+    st.session_state.header_log = log_df
 
-    st.markdown("### Обработанные столбцы нового источника")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("**Заголовки старого файла (shams):**")
+        st.write(headers_old)
+    with col2:
+        st.markdown("**Заголовки нового файла (shams2):**")
+        st.write(headers_new)
 
-    # === 5. Выбор столбцов уже из НОРМАЛИЗОВАННОГО df ===
-    selected = st.multiselect(
-        "Выберите столбцы, которые будут участвовать в сравнении",
-        options=df_new_full.columns.tolist(),
-        default=df_new_full.columns.tolist(),
-    )
+    st.markdown("**Лог изменений столбцов:**")
+    st.dataframe(log_df, use_container_width=True)
 
-    c1, c2 = st.columns(2)
-
-    with c1:
-        if st.button("Отменить"):
-            st.session_state.step = None
-
-    with c2:
-        if st.button(
-            "Применить",
-            disabled=len(selected) == 0
-        ):
-            st.session_state.selected_columns = selected
-            st.session_state.step = 3
-
+    if st.button("Перейти к сопоставлению"):
+        st.session_state.step = 3
 
 
 if st.session_state.step == 2:
-    dialog_select_columns_from_parsed()
+    step_2_auto_header_compare()
 
 
 # ==================================================
 # ===================== STEP 3 =====================
 # ==================================================
-@st.dialog("Сравнение старого и нового источника")
-def dialog_compare_sources():
-    # --- старый файл ---
-    with open(BASE_FILE_PATH, "rb") as f:
-        old_bytes = f.read()
+@st.dialog("Шаг 2 — ручное сопоставление столбцов")
+def step_3_manual_mapping():
 
-    old_xls = pd.ExcelFile(io.BytesIO(old_bytes))
-    df_old_full, *_ = parse_all_sheets_from_bytes(old_bytes, sheets=old_xls.sheet_names)
+    if st.session_state.column_mapping is None:
+        st.session_state.column_mapping = {
+            col: None for col in st.session_state.headers_new
+        }
 
-    # --- новый файл ---
-    new_bytes = st.session_state.new_file.read()
-    new_xls = pd.ExcelFile(io.BytesIO(new_bytes))
-    df_new_full, *_ = parse_all_sheets_from_bytes(new_bytes, sheets=new_xls.sheet_names)
+    mapping = st.session_state.column_mapping
 
-    # --- фильтрация столбцов ---
-    df_new_full = df_new_full[st.session_state.selected_columns]
+    st.info(
+        "Для каждого столбца из НОВОГО файла выберите соответствие в СТАРОМ файле "
+        "или оставьте пустым."
+    )
 
-    # --- сравнение ---
-    df_compare = compare_shams(df_old_full, df_new_full)
-    stats_df = comparison_stats(df_compare)
+    for col_new in st.session_state.headers_new:
+        selected = st.selectbox(
+            f"{col_new} →",
+            ["<нет соответствия>"] + st.session_state.headers_old,
+            index=(
+                st.session_state.headers_old.index(mapping[col_new]) + 1
+                if mapping[col_new] in st.session_state.headers_old
+                else 0
+            ),
+            key=f"map_{col_new}"
+        )
+        mapping[col_new] = None if selected == "<нет соответствия>" else selected
 
-    st.session_state.parsed_old = df_old_full
-    st.session_state.parsed_new = df_new_full
-    st.session_state.compare_result = df_compare
-    st.session_state.compare_stats = stats_df
+    st.session_state.column_mapping = mapping
 
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Отменить"):
-            st.session_state.step = None
-    with c2:
-        if st.button("Продолжить"):
-            st.session_state.step = 4
+    if st.button("Запустить сравнение данных"):
+        st.session_state.step = 4
 
 
 if st.session_state.step == 3:
-    dialog_compare_sources()
+    step_3_manual_mapping()
 
 
 # ==================================================
 # ===================== STEP 4 =====================
 # ==================================================
-@st.dialog("Статистика сравнения")
-def dialog_stats():
-    stats_df = st.session_state.compare_stats
-    stats = dict(zip(stats_df["metric"], stats_df["value"]))
+@st.dialog("Сравнение данных и статистика")
+def step_4_parse_and_compare():
 
-    for k, v in stats.items():
-        st.write(f"{k}: {v}")
+    # парсинг
+    df_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
+    df_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
 
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Отменить"):
-            st.session_state.step = None
-    with c2:
-        if st.button("Актуализировать в БД"):
-            st.session_state.step = 5
+    # сравнение
+    compare_df = compare_shams(df_old, df_new)
+    stats_df = comparison_stats(compare_df)
+
+    st.session_state.compare_df = compare_df
+    st.session_state.compare_stats = stats_df
+
+    st.markdown("### Статистика")
+    st.dataframe(stats_df, use_container_width=True)
+
+    if st.button("Готово"):
+        st.session_state.step = None
 
 
 if st.session_state.step == 4:
-    dialog_stats()
-
-
-# ==================================================
-# ===================== STEP 5 =====================
-# ==================================================
-@st.dialog("Сопоставление с Базой Данных")
-def dialog_db_mapping():
-    DB_MAPPING = {
-        "Group": "Группа видов деятельности",
-        "Class": "Класс видов деятельности",
-        "Subclass": "Код бизнес-деятельности",
-        "Description": "Официальное наименование",
-        "External Party Approval": "Услуга органа",
-        "Authority Name": "Орган",
-    }
-
-    for src, db in DB_MAPPING.items():
-        st.write(f"{src} → {db}")
-
-    c1, c2 = st.columns(2)
-    with c1:
-        if st.button("Отменить"):
-            st.session_state.step = None
-    with c2:
-        if st.button("Подготовить таблицу"):
-            st.success("Таблица подготовлена")
-            st.session_state.step = None
-
-
-if st.session_state.step == 5:
-    dialog_db_mapping()
+    step_4_parse_and_compare()
