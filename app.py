@@ -1,5 +1,6 @@
 import streamlit as st
 from pathlib import Path
+import pandas as pd
 
 from header_log import build_header_change_log_from_bytes
 from shams_parser import parse_all_sheets_from_bytes
