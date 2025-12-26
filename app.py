@@ -5,6 +5,7 @@ from pathlib import Path
 from header_log import build_header_change_log_from_bytes
 from shams_parser import parse_all_sheets_from_bytes
 from compare import compare_shams, comparison_stats
+from DB import DB_COLUMNS
 
 # ================= CONFIG =================
 st.set_page_config(layout="wide")
@@ -270,3 +271,78 @@ if st.session_state.stage == "compare":
         if st.button("Актуализировать в БД", type="primary"):
             st.session_state.stage = "db_update"
             st.rerun()
+
+if st.session_state.stage == "db_mapping":
+
+    st.subheader("Сопоставление столбцов нового источника и Базы Данных")
+    st.caption("Выберите, в какой столбец БД должен попасть каждый столбец результата")
+
+    df = st.session_state.df_compare
+    source_columns = list(df.columns)
+
+    if "db_column_mapping" not in st.session_state:
+        st.session_state.db_column_mapping = {col: None for col in source_columns}
+
+    mapping = st.session_state.db_column_mapping
+
+    left, right = st.columns(2)
+
+    for i, col in enumerate(source_columns):
+        target = left if i % 2 == 0 else right
+
+        with target:
+            selected = st.selectbox(
+                col,
+                options=["<не использовать>"] + DB_COLUMNS,
+                index=(
+                    DB_COLUMNS.index(mapping[col]) + 1
+                    if mapping[col] in DB_COLUMNS
+                    else 0
+                ),
+                key=f"db_map_{col}"
+            )
+
+        mapping[col] = None if selected == "<не использовать>" else selected
+
+    st.session_state.db_column_mapping = mapping
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Назад"):
+            st.session_state.stage = "compare"
+            st.rerun()
+
+    with col2:
+        if st.button("Скачать файл для БД", type="primary"):
+            st.session_state.stage = "db_export"
+            st.rerun()
+
+if st.session_state.stage == "db_export":
+
+    df = st.session_state.df_compare.copy()
+    mapping = st.session_state.db_column_mapping
+
+    rename_map = {k: v for k, v in mapping.items() if v is not None}
+    df_db = df.rename(columns=rename_map)
+
+    # оставляем только выбранные столбцы БД
+    df_db = df_db[list(rename_map.values())]
+
+    import io
+    buffer = io.BytesIO()
+    df_db.to_excel(buffer, index=False)
+    buffer.seek(0)
+
+    st.download_button(
+        "Скачать файл для импорта в БД",
+        data=buffer.getvalue(),
+        file_name="shams_for_db.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    if st.button("Завершить"):
+        st.session_state.stage = "upload"
+        st.rerun()
