@@ -1,16 +1,19 @@
-import pandas as pd
-from datetime import datetime
 import io
+from datetime import datetime
+
+import pandas as pd
 
 
 def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
     """
     Извлекает заголовки ТОЛЬКО из строки, где есть:
     Division, Group, Class, Subclass.
+
     Берёт заголовки начиная с 'Division' и далее.
     """
     bio = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(bio)
+
     if sheets is None:
         sheets = xls.sheet_names
 
@@ -21,12 +24,18 @@ def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
 
         header_row_idx = None
         for i in range(len(df)):
-            row = df.iloc[i].astype(str).str.strip().str.lower().tolist()
+            row = (
+                df.iloc[i]
+                .astype(str)
+                .str.strip()
+                .str.lower()
+                .tolist()
+            )
             if (
-                "division" in row and
-                "group" in row and
-                "class" in row and
-                "subclass" in row
+                "division" in row
+                and "group" in row
+                and "class" in row
+                and "subclass" in row
             ):
                 header_row_idx = i
                 break
@@ -45,11 +54,14 @@ def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
         for col in row.iloc[div_pos:]:
             if pd.isna(col):
                 continue
+
             col_clean = str(col).strip()
             if not col_clean:
                 continue
+
             if col_clean.lower().startswith("unnamed"):
                 continue
+
             if col_clean not in unique_headers:
                 unique_headers.append(col_clean)
 
@@ -59,6 +71,7 @@ def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
 def compare_headers(headers_old, headers_new, provider="Shams Provider"):
     """
     Создаёт лог изменений столбцов.
+
     Возвращает DataFrame с колонками:
     datetime | provider | old | new | action
     """
@@ -74,37 +87,49 @@ def compare_headers(headers_old, headers_new, provider="Shams Provider"):
     rows = []
 
     for col in deleted:
-        rows.append({
-            "datetime": now,
-            "provider": provider,
-            "old": col,
-            "new": None,
-            "action": "deleted",
-        })
+        rows.append(
+            {
+                "datetime": now,
+                "provider": provider,
+                "old": col,
+                "new": None,
+                "action": "deleted",
+            }
+        )
 
     for col in added:
-        rows.append({
-            "datetime": now,
-            "provider": provider,
-            "old": None,
-            "new": col,
-            "action": "added",
-        })
+        rows.append(
+            {
+                "datetime": now,
+                "provider": provider,
+                "old": None,
+                "new": col,
+                "action": "added",
+            }
+        )
 
     for col in unchanged:
-        rows.append({
-            "datetime": now,
-            "provider": provider,
-            "old": col,
-            "new": col,
-            "action": "unchanged",
-        })
+        rows.append(
+            {
+                "datetime": now,
+                "provider": provider,
+                "old": col,
+                "new": col,
+                "action": "unchanged",
+            }
+        )
 
     return pd.DataFrame(rows)
 
 
-def build_header_change_log_from_bytes(shams1_bytes: bytes, shams2_bytes: bytes, sheets):
+def build_header_change_log_from_bytes(
+    shams1_bytes: bytes,
+    shams2_bytes: bytes,
+    sheets,
+):
     h1 = extract_headers_from_main_table(shams1_bytes, sheets)
     h2 = extract_headers_from_main_table(shams2_bytes, sheets)
+
     log_df = compare_headers(h1, h2, provider="Shams Provider")
+
     return h1, h2, log_df
