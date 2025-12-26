@@ -95,20 +95,31 @@ if st.session_state.activity_tab == "Список":
 # ==================================================
 @st.dialog("Укажите новый источник")
 def dialog_upload_file():
+
     uploaded = st.file_uploader(
         "Перетащите сюда файл или загрузите",
-        type=["xlsx"]
+        type=["xlsx"],
+        key="upload_new_source"
     )
 
+    # ✅ фиксируем файл в session_state
+    if uploaded is not None:
+        st.session_state.new_file = uploaded
+
     c1, c2 = st.columns(2)
+
     with c1:
         if st.button("Отменить"):
             st.session_state.step = None
 
     with c2:
-        if uploaded and st.button("Применить"):
-            st.session_state.new_file = uploaded
+        # ✅ кнопка активна, если файл реально есть
+        if st.button(
+            "Применить",
+            disabled=st.session_state.new_file is None
+        ):
             st.session_state.step = 2
+
 
 
 if st.session_state.step == 1:
