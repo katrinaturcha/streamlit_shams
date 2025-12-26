@@ -141,6 +141,10 @@ if st.session_state.stage == "select_headers":
 
 if st.session_state.stage == "mapping":
 
+    # защита от отсутствия ключа
+    if "column_mapping" not in st.session_state:
+        st.session_state.column_mapping = None
+
     st.subheader("Шаг 2 — ручное сопоставление столбцов")
     st.caption(
         "Для каждого выбранного столбца из НОВОГО файла выберите соответствующий столбец "
@@ -150,11 +154,10 @@ if st.session_state.stage == "mapping":
     headers_old = st.session_state.headers_old or []
     headers_new_selected = st.session_state.headers_new_selected or []
 
-    # --- 1. Инициализация mapping ---
-    if "column_mapping" not in st.session_state or st.session_state.column_mapping is None:
+    # инициализация mapping
+    if st.session_state.column_mapping is None:
         st.session_state.column_mapping = {col: None for col in headers_new_selected}
     else:
-        # если пользователь вернулся и поменял галочки — синхронизируем mapping
         current = dict(st.session_state.column_mapping)
         current = {k: v for k, v in current.items() if k in headers_new_selected}
         for col in headers_new_selected:
@@ -165,17 +168,13 @@ if st.session_state.stage == "mapping":
 
     st.markdown("---")
 
-    # --- 2. Интерфейс сопоставления ---
     for col_new in headers_new_selected:
         st.markdown(f"**{col_new} →**")
 
         options = ["<нет соответствия>"] + headers_old
         current_value = mapping.get(col_new)
 
-        if current_value in headers_old:
-            index = headers_old.index(current_value) + 1
-        else:
-            index = 0
+        index = headers_old.index(current_value) + 1 if current_value in headers_old else 0
 
         selected = st.selectbox(
             f"Соответствие для `{col_new}`",
@@ -190,7 +189,6 @@ if st.session_state.stage == "mapping":
 
     st.markdown("---")
 
-    # --- 3. Кнопки управления ---
     col1, col2 = st.columns(2)
 
     with col1:
@@ -200,6 +198,5 @@ if st.session_state.stage == "mapping":
 
     with col2:
         if st.button("Подтвердить сопоставление"):
-            st.session_state.mapping_confirmed = True
-            st.session_state.stage = "compare"   # следующий шаг — сравнение
+            st.session_state.stage = "compare"
             st.rerun()
