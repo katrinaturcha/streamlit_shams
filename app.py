@@ -102,9 +102,8 @@ def dialog_upload_file():
         key="upload_new_source"
     )
 
-    # ✅ фиксируем файл в session_state
     if uploaded is not None:
-        st.session_state.new_file = uploaded
+        st.session_state.new_file_bytes = uploaded.read()
 
     c1, c2 = st.columns(2)
 
@@ -113,12 +112,12 @@ def dialog_upload_file():
             st.session_state.step = None
 
     with c2:
-        # ✅ кнопка активна, если файл реально есть
         if st.button(
             "Применить",
-            disabled=st.session_state.new_file is None
+            disabled="new_file_bytes" not in st.session_state
         ):
             st.session_state.step = 2
+
 
 
 
@@ -135,13 +134,11 @@ def dialog_select_columns_from_parsed():
     import io
 
     # === 1. Берём bytes нового файла ===
-    new_bytes = st.session_state.new_file.read()
+    new_bytes = st.session_state.new_file_bytes
 
-    # === 2. Определяем реальные листы ===
     new_xls = pd.ExcelFile(io.BytesIO(new_bytes))
     new_sheets = new_xls.sheet_names
 
-    # === 3. ЗАПУСКАЕМ SHAMS PARSER ===
     df_new_full, *_ = parse_all_sheets_from_bytes(
         new_bytes,
         sheets=new_sheets
