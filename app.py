@@ -6,6 +6,14 @@ from shams_parser import parse_all_sheets_from_bytes
 from compare import compare_shams, comparison_stats
 from DB import DB_COLUMNS
 
+STAGE_UPLOAD = "upload"
+STAGE_SELECT_HEADERS = "select_headers"
+STAGE_MAPPING = "mapping"
+STAGE_COMPARE = "compare"
+STAGE_DB_MAPPING = "db_mapping"
+STAGE_DB_EXPORT = "db_export"
+
+
 # ================= CONFIG =================
 st.set_page_config(layout="wide")
 
@@ -25,10 +33,16 @@ def init_state():
 
         "headers_old": None,
         "headers_new": None,
-
         "headers_new_selected": None,
 
-        "stage": "upload",  # upload | select_headers
+        "column_mapping": None,
+
+        "df_compare": None,
+        "compare_stats": None,
+
+        "db_column_mapping": None,
+
+        "stage": STAGE_UPLOAD,
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -268,10 +282,10 @@ if st.session_state.stage == "compare":
 
     with col2:
         if st.button("Актуализировать в БД", type="primary"):
-            st.session_state.stage = "db_mapping"
+            st.session_state.stage = STAGE_DB_MAPPING
             st.rerun()
 
-if st.session_state.stage == "db_mapping":
+if st.session_state.stage == STAGE_DB_MAPPING:
 
     st.subheader("Сопоставление столбцов нового источника и Базы Данных")
     st.caption("Выберите, в какой столбец БД должен попасть каждый столбец результата")
@@ -279,8 +293,8 @@ if st.session_state.stage == "db_mapping":
     df = st.session_state.df_compare
     source_columns = list(df.columns)
 
-    if "db_column_mapping" not in st.session_state:
-        st.session_state.db_column_mapping = {col: None for col in source_columns}
+    if st.session_state.db_column_mapping is None:
+        st.session_state.db_column_mapping = {c: None for c in source_columns}
 
     mapping = st.session_state.db_column_mapping
 
@@ -288,7 +302,6 @@ if st.session_state.stage == "db_mapping":
 
     for i, col in enumerate(source_columns):
         target = left if i % 2 == 0 else right
-
         with target:
             selected = st.selectbox(
                 col,
@@ -300,48 +313,18 @@ if st.session_state.stage == "db_mapping":
                 ),
                 key=f"db_map_{col}"
             )
-
         mapping[col] = None if selected == "<не использовать>" else selected
 
     st.session_state.db_column_mapping = mapping
-
-    st.markdown("---")
 
     col1, col2 = st.columns(2)
 
     with col1:
         if st.button("Назад"):
-            st.session_state.stage = "compare"
+            st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
     with col2:
         if st.button("Скачать файл для БД", type="primary"):
-            st.session_state.stage = "db_export"
+            st.session_state.stage = STAGE_DB_EXPORT
             st.rerun()
-
-if st.session_state.stage == "db_export":
-
-    df = st.session_state.df_compare.copy()
-    mapping = st.session_state.db_column_mapping
-
-    rename_map = {k: v for k, v in mapping.items() if v is not None}
-    df_db = df.rename(columns=rename_map)
-
-    # оставляем только выбранные столбцы БД
-    df_db = df_db[list(rename_map.values())]
-
-    import io
-    buffer = io.BytesIO()
-    df_db.to_excel(buffer, index=False)
-    buffer.seek(0)
-
-    st.download_button(
-        "Скачать файл для импорта в БД",
-        data=buffer.getvalue(),
-        file_name="shams_for_db.xlsx",
-        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-    )
-
-    if st.button("Завершить"):
-        st.session_state.stage = "upload"
-        st.rerun()
