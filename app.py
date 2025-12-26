@@ -95,7 +95,7 @@ if st.session_state.activity_tab == "Список":
 # ===================== STEP 1 =====================
 # ==================================================
 if st.session_state.step == 1:
-    with st.modal("Укажите новый источник"):
+    with st.dialog("Укажите новый источник"):
         uploaded = st.file_uploader(
             "Перетащите сюда файл или загрузите",
             type=["xlsx"]
@@ -116,7 +116,7 @@ if st.session_state.step == 1:
 # ===================== STEP 2 =====================
 # ==================================================
 if st.session_state.step == 2:
-    with st.modal("Выберите какие данные из нового источника представляют для вас интерес"):
+    with st.dialog("Выберите какие данные из нового источника представляют для вас интерес"):
         df_preview = pd.read_excel(st.session_state.new_file)
 
         selected = st.multiselect(
@@ -142,7 +142,7 @@ if st.session_state.step == 2:
 import io
 
 if st.session_state.step == 3:
-    with st.modal("Установи соответствие данных нового источника со старым источником"):
+    with st.dialog("Установи соответствие данных нового источника со старым источником"):
         old_cols = [
             "Division",
             "Group",
@@ -218,7 +218,7 @@ if st.session_state.step == 3:
 # ===================== STEP 4 =====================
 # ==================================================
 if st.session_state.step == 4:
-    with st.modal("Статистика сравнения"):
+    with st.dialog("Статистика сравнения"):
         stats_df = st.session_state.compare_stats
 
         stats = dict(zip(stats_df["metric"], stats_df["value"]))
@@ -245,7 +245,7 @@ if st.session_state.step == 4:
 # ===================== STEP 5 =====================
 # ==================================================
 if st.session_state.step == 5:
-    with st.modal("Установи соответствие данных нового источника с данными в Базе Данных"):
+    with st.dialog("Установи соответствие данных нового источника с данными в Базе Данных"):
         DB_MAPPING = {
             "Group": "Группа видов деятельности",
             "Class": "Класс видов деятельности",
