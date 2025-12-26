@@ -194,18 +194,8 @@ if st.session_state.stage == STAGE_MAPPING:
 
         index = headers_old.index(current_value) + 1 if current_value in headers_old else 0
 
-        selected = st.selectbox(
-            col,
-            options=["<нет соответствия>"] + DB_COLUMNS,
-            index=(
-                DB_COLUMNS.index(mapping[col]) + 1
-                if mapping[col] in DB_COLUMNS
-                else 0
-            ),
-            key=f"db_map_{col}"
-        )
-
-        mapping[col] = None if selected == "<нет соответствия>" else selected
+        selected = st.selectbox( f"Соответствие для {col_new}", options=options, index=index, key=f"map_{col_new}")
+        mapping[col_new] = None if selected == "<нет соответствия>" else selected
 
     st.session_state.column_mapping = mapping
 
