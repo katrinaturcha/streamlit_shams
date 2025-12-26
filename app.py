@@ -12,6 +12,8 @@ STAGE_MAPPING = "mapping"
 STAGE_COMPARE = "compare"
 STAGE_DB_MAPPING = "db_mapping"
 STAGE_DB_EXPORT = "db_export"
+STAGE_JOIN_EDIT = "join_edit"
+
 
 
 # ================= CONFIG =================
@@ -192,13 +194,17 @@ if st.session_state.stage == STAGE_MAPPING:
         index = headers_old.index(current_value) + 1 if current_value in headers_old else 0
 
         selected = st.selectbox(
-            f"Соответствие для `{col_new}`",
-            options=options,
-            index=index,
-            key=f"map_{col_new}"
+            col,
+            options=["<нет соответствия>"] + DB_COLUMNS,
+            index=(
+                DB_COLUMNS.index(mapping[col]) + 1
+                if mapping[col] in DB_COLUMNS
+                else 0
+            ),
+            key=f"db_map_{col}"
         )
 
-        mapping[col_new] = None if selected == "<нет соответствия>" else selected
+        mapping[col] = None if selected == "<нет соответствия>" else selected
 
     st.session_state.column_mapping = mapping
 
@@ -304,6 +310,57 @@ if st.session_state.stage == STAGE_DB_MAPPING:
             st.rerun()
 
     with col2:
-        if st.button("Скачать файл для БД", type="primary"):
+        if st.button("Добавить предыдущий обработанный файл (shams_edit.xlsx)"):
+            st.session_state.stage = STAGE_JOIN_EDIT
+            st.rerun()
+
+
+if st.session_state.stage == STAGE_JOIN_EDIT:
+
+    st.subheader("Присоединение предыдущего обработанного файла")
+
+    uploaded = st.file_uploader(
+        "Загрузите shams_edit.xlsx",
+        type=["xlsx"]
+    )
+
+    if uploaded is None:
+        st.stop()
+
+    df_edit = pd.read_excel(uploaded)
+
+    st.markdown("### Выберите столбцы для присоединения")
+
+    edit_cols = list(df_edit.columns)
+    selected_cols = []
+
+    left, right = st.columns(2)
+
+    for i, col in enumerate(edit_cols):
+        target = left if i % 2 == 0 else right
+        with target:
+            if st.checkbox(col, key=f"edit_{col}"):
+                selected_cols.append(col)
+
+    st.markdown("---")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Назад"):
+            st.session_state.stage = STAGE_DB_MAPPING
+            st.rerun()
+
+    with col2:
+        if st.button("Присоединить выбранные столбцы", disabled=len(selected_cols) == 0):
+
+            from compare import join_with_edit
+
+            st.session_state.df_compare = join_with_edit(
+                st.session_state.df_compare,
+                df_edit,
+                selected_cols
+            )
+
             st.session_state.stage = STAGE_DB_EXPORT
             st.rerun()

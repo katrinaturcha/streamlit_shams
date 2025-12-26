@@ -29,11 +29,11 @@ def compare_shams(
     df_old = df_old.copy()
     df_new = df_new.copy()
 
-    df_old["Subclass_norm"] = df_old["Subclass"].apply(normalize_subclass_simple)
-    df_new["Subclass_norm"] = df_new["Subclass"].apply(normalize_subclass_simple)
+    df_old["Subclass_code"] = df_old["Subclass"].apply(normalize_subclass_simple)
+    df_new["Subclass_code"] = df_new["Subclass"].apply(normalize_subclass_simple)
 
-    df_old = df_old[df_old["Subclass_norm"].notna()]
-    df_new = df_new[df_new["Subclass_norm"].notna()]
+    df_old = df_old[df_old["Subclass_code"].notna()]
+    df_new = df_new[df_new["Subclass_code"].notna()]
 
     # ==================================================
     # 2. Разделяем выбранные колонки
@@ -56,13 +56,13 @@ def compare_shams(
     df_old = df_old.add_suffix("_old")
     df_new = df_new.add_suffix("_new")
 
-    df_old = df_old.rename(columns={"Subclass_norm_old": "Subclass_norm"})
-    df_new = df_new.rename(columns={"Subclass_norm_new": "Subclass_norm"})
+    df_old = df_old.rename(columns={"Subclass_norm_old": "Subclass_code"})
+    df_new = df_new.rename(columns={"Subclass_norm_new": "Subclass_code"})
 
     df = pd.merge(
         df_old,
         df_new,
-        on="Subclass_norm",
+        on="Subclass_code",
         how="outer",
         indicator=True,
     )
@@ -124,7 +124,7 @@ def compare_shams(
     # 7. Формирование итоговых колонок
     # ==================================================
     front_cols = [
-        "Subclass_norm",
+        "Subclass_code",
         "status",
         "diff_columns",
     ]
@@ -256,18 +256,20 @@ def comparison_stats(df_compare: pd.DataFrame) -> pd.DataFrame:
     })
     return stats
 
+def join_with_edit(
+    df_compare: pd.DataFrame,
+    df_edit: pd.DataFrame,
+    selected_cols: list[str],
+) -> pd.DataFrame:
+    """
+    Присоединяет выбранные столбцы из shams_edit.xlsx
+    к df_compare по Subclass_code.
+    """
 
-def join_with_edit(df_compare: pd.DataFrame, df_edit: pd.DataFrame) -> pd.DataFrame:
-    """
-    Присоединяет shams_edit1 к df_compare по нормализованному Subclass.
-    В df_edit ключевой столбец: 'Введите код бизнес-деятельности'.
-    """
     df_compare = df_compare.copy()
-    df_compare["Subclass"] = df_compare["Subclass"].astype(str)
-
-    # --- 2. Нормализуем ключ в shams_edit1
     df_edit = df_edit.copy()
 
+    # --- нормализация ключа в edit ---
     def normalize_subclass(code):
         if pd.isna(code):
             return None
@@ -276,14 +278,55 @@ def join_with_edit(df_compare: pd.DataFrame, df_edit: pd.DataFrame) -> pd.DataFr
             return None
         return f"{s[:4]}.{s[4:].ljust(2, '0')[:2]}"
 
-    df_edit["Subclass"] = df_edit["Введите код бизнес-деятельности"].apply(normalize_subclass)
-    df_edit["Subclass"] = df_edit["Subclass"].astype(str)
+    df_edit["Subclass_code"] = (
+        df_edit["Введите код бизнес-деятельности"]
+        .apply(normalize_subclass)
+    )
 
-    # --- 3. Добавляем суффиксы, чтобы избежать конфликтов
+    # --- оставляем только выбранные колонки + ключ ---
+    keep_cols = ["Subclass_code"] + selected_cols
+    df_edit = df_edit[keep_cols]
+
+    # --- суффикс ---
     df_edit = df_edit.add_suffix("_edit")
-    df_edit = df_edit.rename(columns={"Subclass_edit": "Subclass"})
+    df_edit = df_edit.rename(columns={"Subclass_code_edit": "Subclass_code"})
 
-    # --- 4. JOIN
-    df_joined = df_compare.merge(df_edit, on="Subclass", how="left")
+    # --- join ---
+    df_joined = df_compare.merge(
+        df_edit,
+        on="Subclass_code",
+        how="left"
+    )
 
     return df_joined
+
+# def join_with_edit(df_compare: pd.DataFrame, df_edit: pd.DataFrame) -> pd.DataFrame:
+#     """
+#     Присоединяет shams_edit1 к df_compare по нормализованному Subclass.
+#     В df_edit ключевой столбец: 'Введите код бизнес-деятельности'.
+#     """
+#     df_compare = df_compare.copy()
+#     df_compare["Subclass"] = df_compare["Subclass"].astype(str)
+#
+#     # --- 2. Нормализуем ключ в shams_edit1
+#     df_edit = df_edit.copy()
+#
+#     def normalize_subclass(code):
+#         if pd.isna(code):
+#             return None
+#         s = re.sub(r"[^0-9]", "", str(code))
+#         if len(s) < 5:
+#             return None
+#         return f"{s[:4]}.{s[4:].ljust(2, '0')[:2]}"
+#
+#     df_edit["Subclass"] = df_edit["Введите код бизнес-деятельности"].apply(normalize_subclass)
+#     df_edit["Subclass"] = df_edit["Subclass"].astype(str)
+#
+#     # --- 3. Добавляем суффиксы, чтобы избежать конфликтов
+#     df_edit = df_edit.add_suffix("_edit")
+#     df_edit = df_edit.rename(columns={"Subclass_edit": "Subclass"})
+#
+#     # --- 4. JOIN
+#     df_joined = df_compare.merge(df_edit, on="Subclass", how="left")
+#
+#     return df_joined
