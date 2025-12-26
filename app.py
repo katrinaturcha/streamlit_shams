@@ -176,7 +176,7 @@ def dialog_select_columns_from_parsed():
 
 
 if st.session_state.step == 2:
-    dialog_select_columns()
+    dialog_select_columns_from_parsed()
 
 
 # ==================================================
