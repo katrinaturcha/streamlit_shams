@@ -150,11 +150,11 @@ if st.session_state.stage == "select_headers":
             "Перейти к сопоставлению",
             disabled=len(temp_selected) == 0
         ):
-            st.session_state.stage = "mapping"  # следующий этап (сопоставление)
+            st.session_state.stage = STAGE_MAPPING
             st.rerun()
 
 
-if st.session_state.stage == "mapping":
+if st.session_state.stage == STAGE_MAPPING :
 
     # защита от отсутствия ключа
     if "column_mapping" not in st.session_state:
@@ -216,47 +216,24 @@ if st.session_state.stage == "mapping":
             st.session_state.stage = "compare"
             st.rerun()
 
-if st.session_state.stage == "compare":
+if st.session_state.stage == STAGE_COMPARE:
 
     st.subheader("Статистика сравнения")
 
-    # === 1. Парсинг обоих файлов (ЛОГИКА СОХРАНЕНА) ===
-    data_old = st.session_state.shams_bytes
-    data_new = st.session_state.shams2_bytes
+    # парсим ТОЛЬКО если ещё не считали
+    if st.session_state.df_compare is None:
 
-    (
-        df_full_old,
-        df_sec_old,
-        df_div_old,
-        df_grp_old,
-        df_cls_old,
-        df_sub_old,
-    ) = parse_all_sheets_from_bytes(data_old, sheets=None)
+        data_old = st.session_state.shams_bytes
+        data_new = st.session_state.shams2_bytes
 
-    (
-        df_full_new,
-        df_sec_new,
-        df_div_new,
-        df_grp_new,
-        df_cls_new,
-        df_sub_new,
-    ) = parse_all_sheets_from_bytes(data_new, sheets=None)
+        df_full_old, *_ = parse_all_sheets_from_bytes(data_old, sheets=None)
+        df_full_new, *_ = parse_all_sheets_from_bytes(data_new, sheets=None)
 
-    # сохраняем — пригодится для БД и экспорта
-    st.session_state["df_full_old"] = df_full_old
-    st.session_state["df_full_new"] = df_full_new
-    st.session_state["dfs_old"] = (df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old)
-    st.session_state["dfs_new"] = (df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new)
+        df_compare = compare_shams(df_full_old, df_full_new)
+        st.session_state.df_compare = df_compare
+        st.session_state.compare_stats = comparison_stats(df_compare)
 
-    # === 2. Сравнение ===
-    df_compare = compare_shams(df_full_old, df_full_new)
-    st.session_state["df_compare"] = df_compare
-
-    # === 3. Статистика (КЛЮЧЕВОЙ UI) ===
-    stats_df = comparison_stats(df_compare)
-    st.session_state["compare_stats"] = stats_df
-
-    # преобразуем в словарь для красивого вывода
+    stats_df = st.session_state.compare_stats
     stats = dict(zip(stats_df["metric"], stats_df["value"]))
 
     st.markdown(
@@ -270,20 +247,18 @@ if st.session_state.stage == "compare":
         """
     )
 
-    st.markdown("---")
-
-    # === 4. Кнопки управления ===
     col1, col2 = st.columns(2)
 
     with col1:
-        if st.button("Отменить"):
-            st.session_state.stage = "mapping"
+        if st.button("Назад"):
+            st.session_state.stage = STAGE_MAPPING
             st.rerun()
 
     with col2:
         if st.button("Актуализировать в БД", type="primary"):
             st.session_state.stage = STAGE_DB_MAPPING
             st.rerun()
+
 
 if st.session_state.stage == STAGE_DB_MAPPING:
 
