@@ -1,491 +1,256 @@
+
 import streamlit as st
 import pandas as pd
-import io
+from pathlib import Path
 
-from header_log import build_header_change_log_from_bytes
-from shams_parser import parse_all_sheets_from_bytes, make_processed_excel_bytes
-from compare import compare_shams, comparison_stats, join_with_edit
-
-
-SHEETS = ["2 исходный часть 1", "2 исходный часть 2", "2 исходный часть 3"]
+from shams_parser import parse_all_sheets_from_bytes
+from compare import compare_shams, comparison_stats
 
 
-st.set_page_config(page_title="Shams Activity Comparator", layout="wide")
 
-st.title("Streamlit Shams — сравнение версий файла провайдера")
+# ===================== CONFIG =====================
+st.set_page_config(layout="wide")
+
+BASE_FILE_PATH = Path("shams.xlsx")
+
+# ===================== SESSION STATE =====================
+DEFAULT_STATE = {
+    "activity_tab": "Общее",
+    "step": None,
+    "new_file": None,
+    "parsed_old": None,
+    "parsed_new": None,
+    "selected_columns": None,
+    "column_mapping_old_new": None,
+    "compare_result": None,
+}
+
+for k, v in DEFAULT_STATE.items():
+    if k not in st.session_state:
+        st.session_state[k] = v
 
 
-# =========================
-# ШАГ 1. Загрузка файлов
-# =========================
+# ===================== SIDEBAR =====================
+with st.sidebar:
+    st.markdown("### Виды деятельности")
 
-st.header("Шаг 1. Загрузите два файла провайдера")
-
-col1, col2 = st.columns(2)
-with col1:
-    file_old = st.file_uploader("Старый файл (shams)", type=["xlsx"], key="file_old")
-with col2:
-    file_new = st.file_uploader("Новый файл (shams2)", type=["xlsx"], key="file_new")
-
-# ============================================================
-# 1.1. Интерактивное сопоставление столбцов (как в Ajman)
-# ============================================================
-
-if file_old and file_new:
-
-    data_old = file_old.read()
-    data_new = file_new.read()
-
-    st.subheader("1.1. Сопоставление столбцов между shams и shams2")
-
-    # ---------- 1) Получаем исходные заголовки ----------
-    headers_old, headers_new, df_log = build_header_change_log_from_bytes(
-        data_old, data_new, SHEETS
+    st.session_state.activity_tab = st.selectbox(
+        "",
+        ["Общее", "Список"],
+        index=0 if st.session_state.activity_tab == "Общее" else 1
     )
 
-    st.markdown("### Шаг 1 — автоматическое сравнение столбцов")
-    col1, col2 = st.columns(2)
+
+# ==================================================
+# ===================== ОБЩЕЕ ======================
+# ==================================================
+if st.session_state.activity_tab == "Общее":
+    st.markdown("## Общее про активити провайдера")
+
+    col1, col2 = st.columns([1, 2])
 
     with col1:
-        st.markdown("**Заголовки старого файла (shams):**")
-        st.write(headers_old)
+        st.checkbox("Провайдер разрешает активити группы")
+        st.checkbox("Провайдер разрешает активити классы")
+        st.checkbox("Можно совмещать в пределах класса", value=True)
+        st.checkbox("Можно совмещать классы (с одинаковым типом лицензии)")
 
-    with col2:
-        st.markdown("**Заголовки нового файла (shams2):**")
-        st.write(headers_new)
+    st.markdown("### Источник текущего списка видов деятельности")
+    st.write("файл: xls, html, pdf")
+    st.caption("актуализирован 09.12.2025")
 
-    st.markdown("**Лог изменений столбцов:**")
-    st.dataframe(df_log, use_container_width=True)
-
-    # ============================================================
-    # Кнопка: обновить исходный файл провайдера
-    # ============================================================
-
-    st.markdown("### Обновить исходник провайдера")
-
-    st.info(
-        "После нажатия текущий файл **shams2** будет считаться новым исходным "
-        "файлом провайдера внутри системы."
-    )
-
-    if st.button("Обновить исходник провайдера"):
-        st.session_state["provider_baseline_updated"] = True
-        st.success("Исходный файл провайдера успешно обновлён в системе.")
-
-    st.markdown("---")
-
-    st.markdown("### Шаг 2 — ручное сопоставление столбцов")
-
-    # ---------- 2) Создаём структуру сопоставлений ----------
-    if "column_mapping" not in st.session_state:
-        st.session_state["column_mapping"] = {col: None for col in headers_new}
-
-    mapping = st.session_state["column_mapping"]
-
-    st.info(
-        "Для каждого столбца из НОВОГО файла выберите, какой столбец ему соответствует в СТАРОМ файле.\n"
-        "Если новый столбец является новым и не имеет пары — оставьте пустым."
-    )
-
-    # ---------- 3) Интерфейс сопоставления ----------
-    for col_new in headers_new:
-
-        st.write(f"**{col_new} →**")
-        mapped_col = st.selectbox(
-            f"Выберите соответствующий столбец для `{col_new}`",
-            options=["<нет соответствия>"] + headers_old,
-            index=(headers_old.index(mapping[col_new]) + 1) if mapping[col_new] in headers_old else 0,
-            key=f"map_{col_new}"
+    with open(BASE_FILE_PATH, "rb") as f:
+        st.download_button(
+            "Скачать",
+            data=f,
+            file_name="shams.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         )
 
-        mapping[col_new] = None if mapped_col == "<нет соответствия>" else mapped_col
 
-    st.session_state["column_mapping"] = mapping
+# ==================================================
+# ===================== СПИСОК =====================
+# ==================================================
+if st.session_state.activity_tab == "Список":
+    st.markdown("## Список активити провайдера")
 
-    st.markdown("---")
-    st.success("Сопоставление столбцов сохранено.")
+    c1, c2, c3, c4 = st.columns([1, 1, 4, 1])
 
-    # ---------- 4) Подтверждение ----------
+    with c1:
+        st.button("Импорт", disabled=True)
 
-    st.markdown("### Шаг 3 — подтвердить выбор")
-    if st.button("Подтвердить сопоставление и перейти к обработке файлов"):
-        st.session_state["mapping_confirmed"] = True
-        st.success("Сопоставление колонок подтверждено! Теперь можно обрабатывать файлы.")
-        st.markdown("---")
+    with c2:
+        st.button("Экспорт", disabled=True)
 
-    # =========================
-    # ШАГ 2. Обработка файлов
-    # =========================
+    with c4:
+        if st.button("Актуализировать", type="primary"):
+            st.session_state.step = 1
 
-    st.header("Шаг 2. Обработка и сравнение содержимого")
-
-    if st.button("Обработать файлы"):
-        # парсим оба файла
-        st.write("Обработка старого файла...")
-        df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = parse_all_sheets_from_bytes(
-            data_old, SHEETS
-        )
-        st.write("Обработка нового файла...")
-        df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = parse_all_sheets_from_bytes(
-            data_new, SHEETS
-        )
-
-        st.session_state["df_full_old"] = df_full_old
-        st.session_state["df_full_new"] = df_full_new
-        st.session_state["dfs_old"] = (df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old)
-        st.session_state["dfs_new"] = (df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new)
-
-        st.success("Файлы успешно обработаны. Ниже — сравнение.")
-
-    # если уже обработано
-    if "df_full_old" in st.session_state and "df_full_new" in st.session_state:
-        df_full_old = st.session_state["df_full_old"]
-        df_full_new = st.session_state["df_full_new"]
-
-        # st.subheader("2.1. Сравнение df_full_old и df_full_new")
-
-        # df_compare = compare_shams(df_full_old, df_full_new)
-        # st.session_state["df_compare"] = df_compare
-        #
-        # st.dataframe(df_compare, use_container_width=True)
-        df_compare = compare_shams(df_full_old, df_full_new)
-        st.session_state["df_compare"] = df_compare
-
-        # -----------------------------------------
-        # 1) Показываем отдельные таблицы иерархии
-        # -----------------------------------------
-
-        st.subheader("2.1. Отдельные таблицы иерархии (объединённые старый + новый)")
-
-        # достаём иерархию
-        df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
-        df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
+    st.divider()
+    st.info("Нет данных")
 
 
-        # =======================================
-        # 1. Универсальная функция объединения
-        # =======================================
-        def merge_unique(df_old, df_new, key):
-            """
-            Объединяет старую и новую таблицу по ключу.
-            Если код есть в обеих — берём новую запись.
-            """
-            df_old = df_old.copy()
-            df_new = df_new.copy()
-
-            df_old["source"] = "old"
-            df_new["source"] = "new"
-
-            # соединяем
-            df = pd.concat([df_old, df_new], ignore_index=True)
-
-            # сортируем так, чтобы новые были последними — overwrite
-            df = df.sort_values(["source"], ascending=True)
-
-            # убираем дубликаты по ключу, оставляя новую запись
-            df_unique = df.drop_duplicates(subset=[key], keep="last")
-
-            # удаляем служебный столбец
-            df_unique = df_unique.drop(columns=["source"])
-
-            # сортировка по ключу для красоты
-            df_unique = df_unique.sort_values(key)
-
-            return df_unique.reset_index(drop=True)
-
-
-        # =======================================
-        # 2. Объединяем все иерархии
-        # =======================================
-        df_sec_combined = merge_unique(df_sec_old, df_sec_new, "Section")
-        df_div_combined = merge_unique(df_div_old, df_div_new, "Division")
-        df_grp_combined = merge_unique(df_grp_old, df_grp_new, "Group")
-        df_cls_combined = merge_unique(df_cls_old, df_cls_new, "Class")
-
-        # =======================================
-        # 3. Выводим в Streamlit
-        # =======================================
-        tab1, tab2, tab3, tab4 = st.tabs(["Sections", "Divisions", "Groups", "Classes"])
-
-        with tab1:
-            st.dataframe(df_sec_combined, use_container_width=True)
-
-        with tab2:
-            st.dataframe(df_div_combined, use_container_width=True)
-
-        with tab3:
-            st.dataframe(df_grp_combined, use_container_width=True)
-
-        with tab4:
-            st.dataframe(df_cls_combined, use_container_width=True)
-
-        # Сохраняем в session_state для экспорта
-        st.session_state["dfs_combined"] = (
-            df_sec_combined,
-            df_div_combined,
-            df_grp_combined,
-            df_cls_combined,
+# ==================================================
+# ===================== STEP 1 =====================
+# ==================================================
+if st.session_state.step == 1:
+    with st.modal("Укажите новый источник"):
+        uploaded = st.file_uploader(
+            "Перетащите сюда файл или загрузите",
+            type=["xlsx"]
         )
 
-        # -----------------------------------------
-        # 2) Фильтрация сравнения
-        # -----------------------------------------
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Отменить"):
+                st.session_state.step = None
 
-        st.subheader("2.2. Сравнение df_full_old и df_full_new (укороченный вид)")
+        with c2:
+            if uploaded and st.button("Применить"):
+                st.session_state.new_file = uploaded
+                st.session_state.step = 2
 
-        df = df_compare.copy()
 
-        # оставляем только нужные столбцы
-        keep_cols = [
-            "Subclass_norm",
-            "status",
-            "diff_columns",
-            "Section_old", "Section_new",
-            "Division_old", "Division_new",
-            "Group_old", "Group_new",
-            "Class_old", "Class_new",
-            "Subclass_en_old", "Subclass_en_new",
-            # динамические столбцы _new, если есть
+# ==================================================
+# ===================== STEP 2 =====================
+# ==================================================
+if st.session_state.step == 2:
+    with st.modal("Выберите какие данные из нового источника представляют для вас интерес"):
+        df_preview = pd.read_excel(st.session_state.new_file)
+
+        selected = st.multiselect(
+            "Столбцы нового источника",
+            df_preview.columns.tolist(),
+            default=df_preview.columns.tolist()
+        )
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Отменить"):
+                st.session_state.step = None
+
+        with c2:
+            if st.button("Применить"):
+                st.session_state.selected_columns = selected
+                st.session_state.step = 3
+
+
+# ==================================================
+# ===================== STEP 3 =====================
+# ==================================================
+if st.session_state.step == 3:
+    with st.modal("Установи соответствие данных нового источника со старым источником"):
+        old_cols = [
+            "Division",
+            "Group",
+            "Class",
+            "Subclass",
+            "Description",
+            "External Party Approval",
+            "Authority Name",
         ]
 
-        # добавить динамические колонки (_new)
-        dynamic_new = [c for c in df.columns if c.endswith("_new") and any(
-            key in c.lower()
-            for key in ["authority", "approval", "date"]
-        )]
+        new_cols = st.session_state.selected_columns
 
-        keep_cols.extend(dynamic_new)
-
-        # фильтрация
-        df_filtered = df[[c for c in keep_cols if c in df.columns]]
-        df_filtered = df_filtered.rename(columns={"Subclass_norm": "Subclass"})
-        st.dataframe(df_filtered, use_container_width=True)
-
-        # сохраняем
-        st.session_state["df_compare_filtered"] = df_filtered
-
-        st.subheader("2.3. Статистика сравнения")
-        stats = comparison_stats(df_compare)
-        st.table(stats)
-
-        st.subheader("2.4. Выгрузка обработанных файлов")
-
-        # --- достаём иерархию ---
-        df_sec_old, df_div_old, df_grp_old, df_cls_old, df_sub_old = st.session_state["dfs_old"]
-        df_sec_new, df_div_new, df_grp_new, df_cls_new, df_sub_new = st.session_state["dfs_new"]
-
-        # --- достаём объединённую иерархию ---
-        df_sec_combined, df_div_combined, df_grp_combined, df_cls_combined = st.session_state["dfs_combined"]
-
-
-        # ==========================================================
-        # 1. Excel-файлы формата shams_edit1 (старый) и shams_edit2 (новый)
-        # ==========================================================
-        def generate_processed_excel(df_full, df_sec, df_div, df_grp, df_cls):
-            """
-            Создаёт Excel:
-            Full + Sections + Divisions + Groups + Classes
-            С полным описанием en/ar (а НЕ только ключи)
-            """
-            output = io.BytesIO()
-
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df_full.to_excel(writer, sheet_name="Full", index=False)
-                df_sec.to_excel(writer, sheet_name="Sections", index=False)
-                df_div.to_excel(writer, sheet_name="Divisions", index=False)
-                df_grp.to_excel(writer, sheet_name="Groups", index=False)
-                df_cls.to_excel(writer, sheet_name="Classes", index=False)
-
-            return output.getvalue()
-
-
-        excel_old_bytes = generate_processed_excel(
-            df_full_old, df_sec_old, df_div_old, df_grp_old, df_cls_old
-        )
-
-        excel_new_bytes = generate_processed_excel(
-            df_full_new, df_sec_new, df_div_new, df_grp_new, df_cls_new
-        )
-
-
-        # ==========================================================
-        # 2. Excel со сравнением (на основе объединённых списков)
-        # ==========================================================
-        def generate_compare_excel(df_filtered, df_sec, df_div, df_grp, df_cls):
-            output = io.BytesIO()
-
-            with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                df_filtered.to_excel(writer, sheet_name="Comparison", index=False)
-                df_sec.to_excel(writer, sheet_name="Sections", index=False)
-                df_div.to_excel(writer, sheet_name="Divisions", index=False)
-                df_grp.to_excel(writer, sheet_name="Groups", index=False)
-                df_cls.to_excel(writer, sheet_name="Classes", index=False)
-
-            return output.getvalue()
-
-
-        excel_compare_bytes = generate_compare_excel(
-            df_filtered,
-            df_sec_combined,
-            df_div_combined,
-            df_grp_combined,
-            df_cls_combined,
-        )
-
-        # ==========================================================
-        # 3. КНОПКИ СКАЧИВАНИЯ
-        # ==========================================================
-        col_a, col_b, col_c = st.columns(3)
-
-        with col_a:
-            st.download_button(
-                "Скачать обработанный старый файл (shams_edit1 формат)",
-                data=excel_old_bytes,
-                file_name="shams_raw1_edit.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        mapping = {}
+        for col in old_cols:
+            mapping[col] = st.selectbox(
+                f"{col} ←",
+                [""] + new_cols
             )
 
-        with col_b:
-            st.download_button(
-                "Скачать обработанный новый файл (shams_raw2_edit формат)",
-                data=excel_new_bytes,
-                file_name="shams_raw2_edit.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Отменить"):
+                st.session_state.step = None
 
-        with col_c:
-            st.download_button(
-                "Скачать результат сравнения (shams_compare.xlsx)",
-                data=excel_compare_bytes,
-                file_name="shams_compare.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
+        with c2:
+            if st.button("Сравнить"):
+                # === 1. Читаем старый файл (shams.xlsx) ===
+                with open(BASE_FILE_PATH, "rb") as f:
+                    old_bytes = f.read()
 
-        st.markdown("---")
-
-        # =========================
-        # ШАГ 3. Присоединение shams_edit1
-        # =========================
-
-        st.header("Шаг 3. Загрузите первый отредактированный файл и присоедините его")
-
-        edit_file = st.file_uploader(
-            "Загрузите первый отредактированный файл (shams_edit1.xlsx)",
-            type=["xlsx"],
-            key="edit_file",
-        )
-
-        if edit_file is not None:
-
-            # ----------------------------
-            # 1. Читаем файл shams_edit1
-            # ----------------------------
-            df_edit = pd.read_excel(edit_file)
-
-            # ----------------------------
-            # 2. Берём отфильтрованную таблицу сравнения
-            # ----------------------------
-            if "df_compare_filtered" not in st.session_state:
-                st.error("Ошибка: отсутствует df_compare_filtered. Выполните Шаг 2.")
-                st.stop()
-
-            df_filtered = st.session_state["df_compare_filtered"]
-
-            # ----------------------------
-            # 3. Присоединяем df_edit → df_filtered
-            # ----------------------------
-            df_joined = join_with_edit(df_filtered, df_edit)
-
-            # сохраняем результат
-            st.session_state["df_joined"] = df_joined
-
-            st.subheader("3.1. Итоговая таблица с присоединённым shams_edit1")
-            st.dataframe(df_joined, use_container_width=True)
-
-            # ----------------------------
-            # 4. Дополняем итоговый Excel файлами иерархий
-            # ----------------------------
-
-            (
-                df_sec_combined,
-                df_div_combined,
-                df_grp_combined,
-                df_cls_combined,
-            ) = st.session_state["dfs_combined"]
-
-
-            def generate_joined_excel(df_joined, df_sec, df_div, df_grp, df_cls):
-                output = io.BytesIO()
-
-                with pd.ExcelWriter(output, engine="xlsxwriter") as writer:
-                    df_joined.to_excel(writer, sheet_name="Joined", index=False)
-                    df_sec.to_excel(writer, sheet_name="Sections", index=False)
-                    df_div.to_excel(writer, sheet_name="Divisions", index=False)
-                    df_grp.to_excel(writer, sheet_name="Groups", index=False)
-                    df_cls.to_excel(writer, sheet_name="Classes", index=False)
-
-                return output.getvalue()
-
-
-            joined_bytes = generate_joined_excel(
-                df_joined,
-                df_sec_combined,
-                df_div_combined,
-                df_grp_combined,
-                df_cls_combined,
-            )
-
-            # ----------------------------
-            # 5. Кнопка скачать Excel
-            # ----------------------------
-            st.download_button(
-                "Скачать итоговую таблицу (shams_joined.xlsx) для последующего перевода и редактивания в Google Sheets",
-                data=joined_bytes,
-                file_name="shams_joined.xlsx",
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            )
-
-            # =========================
-            # ШАГ 4. Логирование изменений после перевода
-            # =========================
-
-            st.header("Шаг 4. Загрузите файл с переводом для логирования изменений")
-
-            st.markdown(
-                """
-                Здесь будут сравниваться **объединённый файл до перевода и редактирования**
-                и **конечная версия отправки в БД**:
-                - какие строки были удалены  
-                - какие строки были исправлены  
-                - какие записи добавлены  
-                - каким менеджером были внесены изменения  
-
-                **Осталось определить окончательный состав столбцов, которые войдут в таблицу для перевода.**
-                """
-            )
-
-            translation_file = st.file_uploader(
-                "Загрузите файл после перевода (шаг: Google Sheets → выгрузка в Excel)",
-                type=["xlsx"],
-                key="translation_file",
-            )
-
-            if translation_file is not None:
-                st.success("Файл с переводом загружен успешно.")
-
-                df_translation = pd.read_excel(translation_file)
-
-                st.subheader("4.1. Загруженная таблица с переводом")
-                st.dataframe(df_translation, use_container_width=True)
-
-                # сохраняем временно, чтобы использовать при разработке шага сравнения
-                st.session_state["df_translation"] = df_translation
-
-                st.info(
-                    "На следующем шаге будет реализовано сравнение версии ДО перевода и ПОСЛЕ перевода.\n"
-                    "Задача: определить, какие строки изменились, какие удалены, и кто из менеджеров внёс изменения."
+                df_old_full, *_ = parse_all_sheets_from_bytes(
+                    old_bytes,
+                    sheets=["Sheet1"]  # при необходимости заменить на реальные листы
                 )
 
+                # === 2. Читаем новый файл (shams2.xlsx) ===
+                new_bytes = st.session_state.new_file.read()
 
-else:
-    st.info("Загрузите оба файла (старый и новый), чтобы начать.")
+                df_new_full, *_ = parse_all_sheets_from_bytes(
+                    new_bytes,
+                    sheets=["Sheet1"]
+                )
+
+                # === 3. Оставляем только выбранные пользователем столбцы ===
+                selected_cols = st.session_state.selected_columns
+                df_new_full = df_new_full[selected_cols]
+
+                # === 4. Сравниваем старый и новый источники ===
+                df_compare = compare_shams(
+                    df_old=df_old_full,
+                    df_new=df_new_full,
+                )
+
+                # === 5. Считаем статистику ===
+                stats_df = comparison_stats(df_compare)
+
+                # === 6. Сохраняем в session_state ===
+                st.session_state.parsed_old = df_old_full
+                st.session_state.parsed_new = df_new_full
+                st.session_state.compare_result = df_compare
+                st.session_state.compare_stats = stats_df
+
+                st.session_state.step = 4
+
+# ==================================================
+# ===================== STEP 4 =====================
+# ==================================================
+if st.session_state.step == 4:
+    with st.modal("Статистика сравнения"):
+        stats = st.session_state.compare_result["stats"]
+
+        st.write(f"Количество активити в старом файле: {stats['old']}")
+        st.write(f"Количество активити в новом файле: {stats['new']}")
+        st.write(f"Добавлено активити: {stats['added']}")
+        st.write(f"Удалено активити: {stats['deleted']}")
+        st.write(f"Внесены изменения: {stats['changed']}")
+        st.write(f"Остались без изменений: {stats['unchanged']}")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Отменить"):
+                st.session_state.step = None
+
+        with c2:
+            if st.button("Актуализировать в БД"):
+                st.session_state.step = 5
+
+
+# ==================================================
+# ===================== STEP 5 =====================
+# ==================================================
+if st.session_state.step == 5:
+    with st.modal("Установи соответствие данных нового источника с данными в Базе Данных"):
+        DB_MAPPING = {
+            "Group": "Группа видов деятельности",
+            "Class": "Класс видов деятельности",
+            "Subclass": "Код бизнес-деятельности",
+            "Description": "Официальное наименование",
+            "External Party Approval": "Услуга органа",
+            "Authority Name": "Орган",
+        }
+
+        for src, db in DB_MAPPING.items():
+            st.write(f"{src} → {db}")
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Отменить"):
+                st.session_state.step = None
+
+        with c2:
+            if st.button("Подготовить таблицу для работы"):
+                st.success("Таблица подготовлена")
+                st.session_state.step = None
