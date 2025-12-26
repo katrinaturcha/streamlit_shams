@@ -188,11 +188,11 @@ def parse_sheet(df_raw: pd.DataFrame):
     return sections, divisions, division_to_section, groups, classes, subclasses, dynamic_cols
 
 
-def parse_all_sheets_from_bytes(file_bytes, sheets=None):
+def parse_all_sheets_from_bytes(file_bytes, sheets):
     bio = io.BytesIO(file_bytes)
     xls = pd.ExcelFile(bio)
 
-    if sheets is None:
+    if not sheets:
         sheets = xls.sheet_names
 
     S, D, MAP, G, C, SC = {}, {}, {}, {}, {}, {}
