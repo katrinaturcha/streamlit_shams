@@ -24,7 +24,6 @@ DEFAULT_STATE = {
     "step": None,
 
     "shams_bytes": None,
-    "shams2_bytes": None,
 
     "headers_old": None,
     "headers_new": None,
@@ -117,7 +116,7 @@ def step_1_upload():
     )
 
     # ✅ читаем файл ТОЛЬКО ОДИН РАЗ
-    if uploaded is not None and "shams2_bytes" not in st.session_state:
+    if uploaded is not None and st.session_state.get("shams2_bytes") is None:
         st.session_state.shams2_bytes = uploaded.read()
 
     col1, col2 = st.columns(2)
@@ -128,10 +127,9 @@ def step_1_upload():
     with col2:
         st.button(
             "Применить",
-            disabled="shams2_bytes" not in st.session_state,
+            disabled=st.session_state.get("shams2_bytes") is None,
             on_click=lambda: set_step(2)
         )
-
 
 
 if st.session_state.step == 1:
