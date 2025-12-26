@@ -99,26 +99,27 @@ if st.session_state.stage == "select_headers":
     st.subheader("Шаг 1 — выбор столбцов нового файла (shams2)")
     st.caption("Отметьте столбцы, которые пойдут в сопоставление")
 
-    headers = st.session_state.headers_new
-    selected = st.session_state.headers_new_selected
+    headers = st.session_state.headers_new or []
+    prev_selected = st.session_state.headers_new_selected or []
 
     left, right = st.columns(2)
+
+    # собираем выбранные в новый список, НЕ меняя prev_selected в процессе рендера
+    temp_selected = []
 
     for i, col in enumerate(headers):
         target = left if i % 2 == 0 else right
         with target:
             checked = st.checkbox(
                 col,
-                value=col in selected,
+                value=(col in prev_selected),
                 key=f"chk_{col}"
             )
+        if checked:
+            temp_selected.append(col)
 
-        if checked and col not in selected:
-            selected.append(col)
-        if not checked and col in selected:
-            selected.remove(col)
-
-    st.session_state.headers_new_selected = selected
+    # фиксируем результат выбора один раз
+    st.session_state.headers_new_selected = temp_selected
 
     st.markdown("---")
 
@@ -130,7 +131,75 @@ if st.session_state.stage == "select_headers":
             st.rerun()
 
     with col2:
-        st.button(
+        if st.button(
             "Перейти к сопоставлению",
-            disabled=len(selected) == 0
+            disabled=len(temp_selected) == 0
+        ):
+            st.session_state.stage = "mapping"  # следующий этап (сопоставление)
+            st.rerun()
+
+
+if st.session_state.stage == "mapping":
+
+    st.subheader("Шаг 2 — ручное сопоставление столбцов")
+    st.caption(
+        "Для каждого выбранного столбца из НОВОГО файла выберите соответствующий столбец "
+        "в СТАРОМ файле. Если соответствия нет — оставьте «<нет соответствия>»."
+    )
+
+    headers_old = st.session_state.headers_old or []
+    headers_new_selected = st.session_state.headers_new_selected or []
+
+    # --- 1. Инициализация mapping ---
+    if "column_mapping" not in st.session_state or st.session_state.column_mapping is None:
+        st.session_state.column_mapping = {col: None for col in headers_new_selected}
+    else:
+        # если пользователь вернулся и поменял галочки — синхронизируем mapping
+        current = dict(st.session_state.column_mapping)
+        current = {k: v for k, v in current.items() if k in headers_new_selected}
+        for col in headers_new_selected:
+            current.setdefault(col, None)
+        st.session_state.column_mapping = current
+
+    mapping = st.session_state.column_mapping
+
+    st.markdown("---")
+
+    # --- 2. Интерфейс сопоставления ---
+    for col_new in headers_new_selected:
+        st.markdown(f"**{col_new} →**")
+
+        options = ["<нет соответствия>"] + headers_old
+        current_value = mapping.get(col_new)
+
+        if current_value in headers_old:
+            index = headers_old.index(current_value) + 1
+        else:
+            index = 0
+
+        selected = st.selectbox(
+            f"Соответствие для `{col_new}`",
+            options=options,
+            index=index,
+            key=f"map_{col_new}"
         )
+
+        mapping[col_new] = None if selected == "<нет соответствия>" else selected
+
+    st.session_state.column_mapping = mapping
+
+    st.markdown("---")
+
+    # --- 3. Кнопки управления ---
+    col1, col2 = st.columns(2)
+
+    with col1:
+        if st.button("Назад"):
+            st.session_state.stage = "select_headers"
+            st.rerun()
+
+    with col2:
+        if st.button("Подтвердить сопоставление"):
+            st.session_state.mapping_confirmed = True
+            st.session_state.stage = "compare"   # следующий шаг — сравнение
+            st.rerun()
