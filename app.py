@@ -11,7 +11,8 @@ from compare import compare_shams, comparison_stats
 # ===================== CONFIG =====================
 st.set_page_config(layout="wide")
 
-BASE_FILE_PATH = Path("shams.xlsx")
+BASE_DIR = Path(__file__).resolve().parent
+BASE_FILE_PATH = BASE_DIR / "shams.xlsx"
 
 # ===================== SESSION STATE =====================
 DEFAULT_STATE = {
@@ -138,6 +139,8 @@ if st.session_state.step == 2:
 # ==================================================
 # ===================== STEP 3 =====================
 # ==================================================
+import io
+
 if st.session_state.step == 3:
     with st.modal("Установи соответствие данных нового источника со старым источником"):
         old_cols = [
@@ -166,37 +169,44 @@ if st.session_state.step == 3:
 
         with c2:
             if st.button("Сравнить"):
-                # === 1. Читаем старый файл (shams.xlsx) ===
+                # ========= 1. Старый файл (shams.xlsx) =========
                 with open(BASE_FILE_PATH, "rb") as f:
                     old_bytes = f.read()
 
+                # получаем реальные имена листов
+                old_xls = pd.ExcelFile(io.BytesIO(old_bytes))
+                old_sheets = old_xls.sheet_names
+
                 df_old_full, *_ = parse_all_sheets_from_bytes(
                     old_bytes,
-                    sheets=["Sheet1"]  # при необходимости заменить на реальные листы
+                    sheets=old_sheets
                 )
 
-                # === 2. Читаем новый файл (shams2.xlsx) ===
+                # ========= 2. Новый файл (shams2.xlsx) =========
                 new_bytes = st.session_state.new_file.read()
+
+                new_xls = pd.ExcelFile(io.BytesIO(new_bytes))
+                new_sheets = new_xls.sheet_names
 
                 df_new_full, *_ = parse_all_sheets_from_bytes(
                     new_bytes,
-                    sheets=["Sheet1"]
+                    sheets=new_sheets
                 )
 
-                # === 3. Оставляем только выбранные пользователем столбцы ===
+                # ========= 3. Фильтрация столбцов (UI-логика) =========
                 selected_cols = st.session_state.selected_columns
                 df_new_full = df_new_full[selected_cols]
 
-                # === 4. Сравниваем старый и новый источники ===
+                # ========= 4. Сравнение =========
                 df_compare = compare_shams(
                     df_old=df_old_full,
                     df_new=df_new_full,
                 )
 
-                # === 5. Считаем статистику ===
+                # ========= 5. Статистика =========
                 stats_df = comparison_stats(df_compare)
 
-                # === 6. Сохраняем в session_state ===
+                # ========= 6. Сохранение состояния =========
                 st.session_state.parsed_old = df_old_full
                 st.session_state.parsed_new = df_new_full
                 st.session_state.compare_result = df_compare
@@ -209,14 +219,16 @@ if st.session_state.step == 3:
 # ==================================================
 if st.session_state.step == 4:
     with st.modal("Статистика сравнения"):
-        stats = st.session_state.compare_result["stats"]
+        stats_df = st.session_state.compare_stats
 
-        st.write(f"Количество активити в старом файле: {stats['old']}")
-        st.write(f"Количество активити в новом файле: {stats['new']}")
-        st.write(f"Добавлено активити: {stats['added']}")
-        st.write(f"Удалено активити: {stats['deleted']}")
-        st.write(f"Внесены изменения: {stats['changed']}")
-        st.write(f"Остались без изменений: {stats['unchanged']}")
+        stats = dict(zip(stats_df["metric"], stats_df["value"]))
+
+        st.write(f"Количество строк в старом файле: {stats['Количество строк в старом файле']}")
+        st.write(f"Количество строк в новом файле: {stats['Количество строк в новом файле']}")
+        st.write(f"Добавлено: {stats['Добавлено']}")
+        st.write(f"Удалено: {stats['Удалено']}")
+        st.write(f"Изменено (по английским описаниям): {stats['Изменено (по английским описаниям)']}")
+        st.write(f"Не изменено: {stats['Не изменено']}")
 
         c1, c2 = st.columns(2)
         with c1:
@@ -226,6 +238,7 @@ if st.session_state.step == 4:
         with c2:
             if st.button("Актуализировать в БД"):
                 st.session_state.step = 5
+
 
 
 # ==================================================
