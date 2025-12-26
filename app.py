@@ -84,29 +84,34 @@ if st.session_state.activity_tab == "Список":
 # ==================================================
 # ===================== STEP 1 =====================
 # ==================================================
+def apply_new_source():
+    st.session_state.step = 2
+
+
 @st.dialog("Укажите новый источник")
 def step_1_upload():
 
     uploaded = st.file_uploader(
         "Загрузите новый файл (shams2)",
-        type=["xlsx"]
+        type=["xlsx"],
+        key="upload_shams2"
     )
 
     if uploaded is not None:
         st.session_state.shams2_bytes = uploaded.read()
 
     col1, col2 = st.columns(2)
+
     with col1:
-        if st.button("Отменить"):
-            st.session_state.step = None
+        st.button("Отменить", on_click=lambda: st.session_state.update(step=None))
+
     with col2:
-        if st.button(
+        st.button(
             "Применить",
-            disabled=st.session_state.shams2_bytes is None
-        ):
-            with open(SHAMS_PATH, "rb") as f:
-                st.session_state.shams_bytes = f.read()
-            st.session_state.step = 2
+            disabled="shams2_bytes" not in st.session_state,
+            on_click=apply_new_source
+        )
+
 
 
 if st.session_state.step == 1:

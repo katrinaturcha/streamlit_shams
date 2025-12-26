@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="dialog_upload_file_columns_">
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="new_bytes">
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -254,7 +254,15 @@
       <option name="project" value="LOCAL" />
       <updated>1766734774845</updated>
     </task>
-    <option name="localTasksCounter" value="25" />
+    <task id="LOCAL-00025" summary="new_bytes">
+      <option name="closed" value="true" />
+      <created>1766735231792</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1766735231792</updated>
+    </task>
+    <option name="localTasksCounter" value="26" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -276,6 +284,7 @@
     <MESSAGE value="dialog_upload_file" />
     <MESSAGE value="dialog_upload_file_columns" />
     <MESSAGE value="dialog_upload_file_columns_" />
-    <option name="LAST_COMMIT_MESSAGE" value="dialog_upload_file_columns_" />
+    <MESSAGE value="new_bytes" />
+    <option name="LAST_COMMIT_MESSAGE" value="new_bytes" />
   </component>
 </project>
