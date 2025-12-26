@@ -154,7 +154,7 @@ if st.session_state.stage == "select_headers":
             st.rerun()
 
 
-if st.session_state.stage == STAGE_MAPPING :
+if st.session_state.stage == STAGE_MAPPING:
 
     # защита от отсутствия ключа
     if "column_mapping" not in st.session_state:
@@ -229,7 +229,11 @@ if st.session_state.stage == STAGE_COMPARE:
         df_full_old, *_ = parse_all_sheets_from_bytes(data_old, sheets=None)
         df_full_new, *_ = parse_all_sheets_from_bytes(data_new, sheets=None)
 
-        df_compare = compare_shams(df_full_old, df_full_new)
+        df_compare = compare_shams(
+            df_full_old,
+            df_full_new,
+            st.session_state.column_mapping
+        )
         st.session_state.df_compare = df_compare
         st.session_state.compare_stats = comparison_stats(df_compare)
 
