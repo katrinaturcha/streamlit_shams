@@ -129,25 +129,50 @@ if st.session_state.step == 1:
 # ==================================================
 # ===================== STEP 2 =====================
 # ==================================================
-@st.dialog("Выберите какие данные из нового источника представляют для вас интерес")
-def dialog_select_columns():
-    df_preview = pd.read_excel(st.session_state.new_file)
+@st.dialog("Выберите данные нового источника для сравнения")
+def dialog_select_columns_from_parsed():
 
+    import io
+
+    # === 1. Берём bytes нового файла ===
+    new_bytes = st.session_state.new_file.read()
+
+    # === 2. Определяем реальные листы ===
+    new_xls = pd.ExcelFile(io.BytesIO(new_bytes))
+    new_sheets = new_xls.sheet_names
+
+    # === 3. ЗАПУСКАЕМ SHAMS PARSER ===
+    df_new_full, *_ = parse_all_sheets_from_bytes(
+        new_bytes,
+        sheets=new_sheets
+    )
+
+    # === 4. Сохраняем обработанный результат ===
+    st.session_state.parsed_new = df_new_full
+
+    st.markdown("### Обработанные столбцы нового источника")
+
+    # === 5. Выбор столбцов уже из НОРМАЛИЗОВАННОГО df ===
     selected = st.multiselect(
-        "Столбцы нового источника",
-        df_preview.columns.tolist(),
-        default=df_preview.columns.tolist()
+        "Выберите столбцы, которые будут участвовать в сравнении",
+        options=df_new_full.columns.tolist(),
+        default=df_new_full.columns.tolist(),
     )
 
     c1, c2 = st.columns(2)
+
     with c1:
         if st.button("Отменить"):
             st.session_state.step = None
 
     with c2:
-        if st.button("Применить"):
+        if st.button(
+            "Применить",
+            disabled=len(selected) == 0
+        ):
             st.session_state.selected_columns = selected
             st.session_state.step = 3
+
 
 
 if st.session_state.step == 2:
