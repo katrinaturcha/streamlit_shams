@@ -1,7 +1,6 @@
 import pandas as pd
-import re
-
 from utils import normalize_text_for_compare, normalize_subclass_simple
+
 
 def compare_shams(
     df_old: pd.DataFrame,
@@ -9,24 +8,13 @@ def compare_shams(
     column_mapping: dict,
 ) -> pd.DataFrame:
     """
-    Сравнивает старый и новый файлы SHAMS
-    с учётом выбранных и сопоставленных столбцов.
-
-    column_mapping:
-        {
-            <new_col>: <old_col> | None
-        }
-
-    Возвращает DataFrame:
-        Subclass_norm
-        status
-        diff_columns
-        + *_old / *_new только для нужных колонок
+    Сравнивает ТОЛЬКО выбранные и сопоставленные колонки.
+    В итоговом df нет лишних столбцов физически.
     """
 
-    # --------------------------------------------------
-    # 1. Копии + нормализация ключа
-    # --------------------------------------------------
+    # ==================================================
+    # 1. Нормализация ключа
+    # ==================================================
     df_old = df_old.copy()
     df_new = df_new.copy()
 
@@ -36,22 +24,35 @@ def compare_shams(
     df_old = df_old[df_old["Subclass_norm"].notna()]
     df_new = df_new[df_new["Subclass_norm"].notna()]
 
-    # --------------------------------------------------
-    # 2. Подготовка колонок для сравнения
-    # --------------------------------------------------
-    # пары (old_col, new_col), ТОЛЬКО если есть соответствие
+    # ==================================================
+    # 2. Определяем РАЗРЕШЁННЫЕ колонки
+    # ==================================================
+    # всегда нужны:
+    BASE_COLS = {"Subclass_norm", "Subclass_en"}
+
+    # пары сопоставлений
     compare_pairs = [
         (old_col, new_col)
         for new_col, old_col in column_mapping.items()
         if old_col is not None
     ]
 
-    # Subclass_en — всегда сравниваем
-    BASE_COMPARE_COL = "Subclass_en"
+    old_cols_needed = {old for old, _ in compare_pairs}
+    new_cols_needed = {new for _, new in compare_pairs}
 
-    # --------------------------------------------------
-    # 3. Суффиксы и merge
-    # --------------------------------------------------
+    # итоговый whitelist
+    old_keep = BASE_COLS | old_cols_needed
+    new_keep = BASE_COLS | new_cols_needed
+
+    # ==================================================
+    # 3. ЖЁСТКАЯ ФИЛЬТРАЦИЯ колонок (КЛЮЧЕВОЙ ШАГ)
+    # ==================================================
+    df_old = df_old[[c for c in df_old.columns if c in old_keep]]
+    df_new = df_new[[c for c in df_new.columns if c in new_keep]]
+
+    # ==================================================
+    # 4. Суффиксы и merge
+    # ==================================================
     df_old = df_old.add_suffix("_old")
     df_new = df_new.add_suffix("_new")
 
@@ -66,9 +67,9 @@ def compare_shams(
         indicator=True,
     )
 
-    # --------------------------------------------------
-    # 4. Первичный статус
-    # --------------------------------------------------
+    # ==================================================
+    # 5. Первичный статус
+    # ==================================================
     def initial_status(row):
         if row["_merge"] == "left_only":
             return "deleted"
@@ -78,9 +79,9 @@ def compare_shams(
 
     df["status"] = df.apply(initial_status, axis=1)
 
-    # --------------------------------------------------
-    # 5. Поиск различий
-    # --------------------------------------------------
+    # ==================================================
+    # 6. Поиск различий ТОЛЬКО по выбранным колонкам
+    # ==================================================
     diff_columns = []
 
     for _, row in df.iterrows():
@@ -88,18 +89,17 @@ def compare_shams(
 
         if row["status"] == "potentially_changed":
 
-            # --- Subclass_en ---
-            old_val = normalize_text_for_compare(row.get("Subclass_en_old", ""))
-            new_val = normalize_text_for_compare(row.get("Subclass_en_new", ""))
-
-            if old_val != new_val:
+            # Subclass_en — всегда
+            if (
+                normalize_text_for_compare(row.get("Subclass_en_old", ""))
+                != normalize_text_for_compare(row.get("Subclass_en_new", ""))
+            ):
                 diffs.append("Subclass_en")
 
-            # --- динамические колонки ---
+            # динамика
             for old_col, new_col in compare_pairs:
                 old_v = normalize_text_for_compare(row.get(f"{old_col}_old", ""))
                 new_v = normalize_text_for_compare(row.get(f"{new_col}_new", ""))
-
                 if old_v != new_v:
                     diffs.append(new_col)
 
@@ -107,41 +107,37 @@ def compare_shams(
 
     df["diff_columns"] = diff_columns
 
-    # --------------------------------------------------
-    # 6. Финальный статус
-    # --------------------------------------------------
+    # ==================================================
+    # 7. Финальный статус
+    # ==================================================
     def final_status(row):
         if row["status"] in ("added", "deleted"):
             return row["status"]
-        if len(row["diff_columns"]) > 0:
+        if row["diff_columns"]:
             return "changed"
         return "not changed"
 
     df["status"] = df.apply(final_status, axis=1)
 
-    # --------------------------------------------------
-    # 7. Формирование итогового набора колонок
-    # --------------------------------------------------
-    front_cols = [
+    # ==================================================
+    # 8. ФИНАЛЬНЫЙ набор колонок (и ТОЛЬКО ОН)
+    # ==================================================
+    final_cols = [
         "Subclass_norm",
         "status",
         "diff_columns",
-    ]
-
-    base_cols = [
         "Subclass_en_old",
         "Subclass_en_new",
     ]
 
-    dynamic_cols = []
     for old_col, new_col in compare_pairs:
-        dynamic_cols.append(f"{old_col}_old")
-        dynamic_cols.append(f"{new_col}_new")
+        final_cols.append(f"{old_col}_old")
+        final_cols.append(f"{new_col}_new")
 
-    final_cols = front_cols + base_cols + dynamic_cols
     final_cols = [c for c in final_cols if c in df.columns]
 
     return df[final_cols]
+
 
 # def compare_shams(df_old, df_new):
 #
