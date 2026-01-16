@@ -4,9 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="new_bytes">
-      <change beforePath="$PROJECT_DIR$/compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/compare.py" afterDir="false" />
-    </list>
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="final note" />
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -22,21 +20,9 @@
   <component name="Git.Settings">
     <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
   </component>
-  <component name="GitHubPullRequestSearchHistory"><![CDATA[{
-  "lastFilter": {
-    "state": "OPEN",
-    "assignee": "katrinaturcha"
-  }
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 3
 }]]></component>
-  <component name="GithubPullRequestsUISettings"><![CDATA[{
-  "selectedUrlAndAccountId": {
-    "url": "https://github.com/katrinaturcha/streamlit_shams.git",
-    "accountId": "656020f2-0ab4-44d3-a798-22e2b1fee47c"
-  }
-}]]></component>
-  <component name="ProjectColorInfo">{
-  &quot;associatedIndex&quot;: 3
-}</component>
   <component name="ProjectId" id="360zvKZpGe11wfxAzHjVzUJao6e" />
   <component name="ProjectLevelVcsManager" settingsEditedManually="true" />
   <component name="ProjectViewState">
@@ -44,24 +30,17 @@
     <option name="showLibraryContents" value="true" />
     <option name="showMembers" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.OpenProjectViewOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/e.turchaninova/PycharmProjects/streamlit_shams_ui&quot;,
-    &quot;settings.editor.selected.configurable&quot;: &quot;org.jetbrains.plugins.github.ui.GithubSettingsConfigurable&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.OpenProjectViewOnStart": "true",
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "master"
   }
-}</component>
-  <component name="RecentsManager">
-    <key name="CopyFile.RECENT_KEYS">
-      <recent name="C:\Users\e.turchaninova\PycharmProjects\streamlit_shams_ui" />
-    </key>
-  </component>
+}]]></component>
   <component name="SharedIndexes">
     <attachedChunks>
       <set>
-        <option value="bundled-python-sdk-ce3d9afa04ac-ba05f1cad1b1-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-242.20224.347" />
+        <option value="bundled-python-sdk-d68999036c7f-d3b881c8e49f-com.jetbrains.pycharm.community.sharedIndexes.bundled-PC-233.14475.56" />
       </set>
     </attachedChunks>
   </component>
@@ -186,95 +165,7 @@
       <option name="project" value="LOCAL" />
       <updated>1764229802623</updated>
     </task>
-    <task id="LOCAL-00015" summary="renew">
-      <option name="closed" value="true" />
-      <created>1764233767232</created>
-      <option name="number" value="00015" />
-      <option name="presentableId" value="LOCAL-00015" />
-      <option name="project" value="LOCAL" />
-      <updated>1764233767232</updated>
-    </task>
-    <task id="LOCAL-00016" summary="renew">
-      <option name="closed" value="true" />
-      <created>1766731234430</created>
-      <option name="number" value="00016" />
-      <option name="presentableId" value="LOCAL-00016" />
-      <option name="project" value="LOCAL" />
-      <updated>1766731234430</updated>
-    </task>
-    <task id="LOCAL-00017" summary="add files">
-      <option name="closed" value="true" />
-      <created>1766731951330</created>
-      <option name="number" value="00017" />
-      <option name="presentableId" value="LOCAL-00017" />
-      <option name="project" value="LOCAL" />
-      <updated>1766731951330</updated>
-    </task>
-    <task id="LOCAL-00018" summary="add files">
-      <option name="closed" value="true" />
-      <created>1766731981936</created>
-      <option name="number" value="00018" />
-      <option name="presentableId" value="LOCAL-00018" />
-      <option name="project" value="LOCAL" />
-      <updated>1766731981936</updated>
-    </task>
-    <task id="LOCAL-00019" summary="step 3">
-      <option name="closed" value="true" />
-      <created>1766732626425</created>
-      <option name="number" value="00019" />
-      <option name="presentableId" value="LOCAL-00019" />
-      <option name="project" value="LOCAL" />
-      <updated>1766732626425</updated>
-    </task>
-    <task id="LOCAL-00020" summary="step 3">
-      <option name="closed" value="true" />
-      <created>1766732974826</created>
-      <option name="number" value="00020" />
-      <option name="presentableId" value="LOCAL-00020" />
-      <option name="project" value="LOCAL" />
-      <updated>1766732974826</updated>
-    </task>
-    <task id="LOCAL-00021" summary="full st.dialog">
-      <option name="closed" value="true" />
-      <created>1766733547755</created>
-      <option name="number" value="00021" />
-      <option name="presentableId" value="LOCAL-00021" />
-      <option name="project" value="LOCAL" />
-      <updated>1766733547755</updated>
-    </task>
-    <task id="LOCAL-00022" summary="dialog_upload_file">
-      <option name="closed" value="true" />
-      <created>1766733850553</created>
-      <option name="number" value="00022" />
-      <option name="presentableId" value="LOCAL-00022" />
-      <option name="project" value="LOCAL" />
-      <updated>1766733850553</updated>
-    </task>
-    <task id="LOCAL-00023" summary="dialog_upload_file_columns">
-      <option name="closed" value="true" />
-      <created>1766734588278</created>
-      <option name="number" value="00023" />
-      <option name="presentableId" value="LOCAL-00023" />
-      <option name="project" value="LOCAL" />
-      <updated>1766734588278</updated>
-    </task>
-    <task id="LOCAL-00024" summary="dialog_upload_file_columns_">
-      <option name="closed" value="true" />
-      <created>1766734774845</created>
-      <option name="number" value="00024" />
-      <option name="presentableId" value="LOCAL-00024" />
-      <option name="project" value="LOCAL" />
-      <updated>1766734774845</updated>
-    </task>
-    <task id="LOCAL-00025" summary="new_bytes">
-      <option name="closed" value="true" />
-      <created>1766735231792</created>
-      <option name="number" value="00025" />
-      <option name="presentableId" value="LOCAL-00025" />
-      <option name="project" value="LOCAL" />
-      <updated>1766735231792</updated>
-    </task>
-    <option name="localTasksCounter" value="26" />
+    <option name="localTasksCounter" value="15" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -289,14 +180,6 @@
     <MESSAGE value="fix bug" />
     <MESSAGE value="compare py" />
     <MESSAGE value="final note" />
-    <MESSAGE value="renew" />
-    <MESSAGE value="add files" />
-    <MESSAGE value="step 3" />
-    <MESSAGE value="full st.dialog" />
-    <MESSAGE value="dialog_upload_file" />
-    <MESSAGE value="dialog_upload_file_columns" />
-    <MESSAGE value="dialog_upload_file_columns_" />
-    <MESSAGE value="new_bytes" />
-    <option name="LAST_COMMIT_MESSAGE" value="new_bytes" />
+    <option name="LAST_COMMIT_MESSAGE" value="final note" />
   </component>
 </project>
