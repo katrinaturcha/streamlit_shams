@@ -63,6 +63,9 @@ def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
                 continue
 
             if col_clean not in unique_headers:
+                col_clean = str(col).replace("\u00A0", " ").replace("\n", " ").replace("\r", " ")
+                col_clean = " ".join(col_clean.split()).strip()
+
                 unique_headers.append(col_clean)
 
     return unique_headers

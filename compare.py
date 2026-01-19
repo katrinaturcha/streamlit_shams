@@ -179,13 +179,55 @@ def compare_shams(
     # ==================================================
     # 7. Новые колонки без соответствия: оставляем как есть (из new)
     # ==================================================
+    # new_only_out_cols = []
+    # for new_col in new_only_cols:
+    #     col_new_name = f"{new_col}_new"
+    #     out_name = new_col  # сохраняем текущее имя
+    #     if col_new_name in df.columns:
+    #         df[out_name] = df[col_new_name]
+    #         new_only_out_cols.append(out_name)
+    # missing = []
+    # for new_col in new_only_cols:
+    #     if f"{new_col}_new" not in df.columns:
+    #         missing.append((new_col, f"{new_col}_new"))
+    # print("MISSING new_only:", missing[:20])
+    # print("SAMPLE df cols:", list(df.columns)[:50])
+
+    # ==================================================
+    # 7. Новые колонки без соответствия: оставляем как есть (из new)
+    #    НО ищем колонку устойчиво (strip, NBSP, переносы, двойные пробелы, регистр)
+    # ==================================================
+    def _norm_colname(x: str) -> str:
+        if x is None:
+            return ""
+        s = str(x)
+        s = s.replace("\u00A0", " ")          # NBSP -> обычный пробел
+        s = s.replace("\n", " ").replace("\r", " ")
+        s = " ".join(s.split())               # схлопнуть множественные пробелы
+        return s.strip().lower()
+
+    # индекс по df.columns: нормализованное имя -> реальное имя
+    norm_to_real = {_norm_colname(c): c for c in df.columns}
+
     new_only_out_cols = []
     for new_col in new_only_cols:
-        col_new_name = f"{new_col}_new"
-        out_name = new_col  # сохраняем текущее имя
-        if col_new_name in df.columns:
-            df[out_name] = df[col_new_name]
+        # хотим взять колонку из merged df с суффиксом _new
+        wanted = f"{new_col}_new"
+
+        real_col = None
+
+        # 1) если вдруг совпало идеально
+        if wanted in df.columns:
+            real_col = wanted
+        else:
+            # 2) ищем по нормализованному имени
+            real_col = norm_to_real.get(_norm_colname(wanted))
+
+        if real_col:
+            out_name = str(new_col).strip()   # сохраняем имя как в UI
+            df[out_name] = df[real_col]
             new_only_out_cols.append(out_name)
+
 
     # ==================================================
     # 8. Финальный набор колонок
