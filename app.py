@@ -1,10 +1,13 @@
 import streamlit as st
 from pathlib import Path
+import pandas as pd
 
 from header_log import build_header_change_log_from_bytes
 from shams_parser import parse_all_sheets_from_bytes
 from compare import compare_shams, comparison_stats
 from DB import DB_COLUMNS
+import io
+
 
 # ================== STAGES ==================
 STAGE_UPLOAD = "upload"
@@ -44,6 +47,8 @@ def init_state():
         "db_column_mapping": None,
 
         "stage": STAGE_UPLOAD,
+        "db_mapping_saved": False,
+
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -147,8 +152,14 @@ if st.session_state.stage == STAGE_SELECT_HEADERS:
             "Перейти к сопоставлению",
             disabled=len(temp_selected) == 0
         ):
+            st.session_state.column_mapping = None
+            st.session_state.df_compare = None
+            st.session_state.compare_stats = None
+            st.session_state.db_column_mapping = None
+            st.session_state.db_mapping_saved = False
             st.session_state.stage = STAGE_MAPPING
             st.rerun()
+
 
 
 # ==================================================
@@ -214,6 +225,10 @@ if st.session_state.stage == STAGE_MAPPING:
 
     with col2:
         if st.button("Подтвердить сопоставление"):
+            st.session_state.df_compare = None
+            st.session_state.compare_stats = None
+            st.session_state.db_column_mapping = None
+            st.session_state.db_mapping_saved = False
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
@@ -270,37 +285,140 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 # ============ STAGE 5 — DB MAPPING =================
 # ==================================================
+# if st.session_state.stage == STAGE_DB_MAPPING:
+#
+#     st.subheader("Сопоставление столбцов нового источника и Базы Данных")
+#     st.caption("Выберите, в какой столбец БД должен попасть каждый столбец результата")
+#
+#     df = st.session_state.df_compare
+#     source_columns = list(df.columns)
+#
+#     if st.session_state.db_column_mapping is None:
+#         st.session_state.db_column_mapping = {c: None for c in source_columns}
+#
+#     mapping = st.session_state.db_column_mapping
+#     left, right = st.columns(2)
+#
+#     for i, col in enumerate(source_columns):
+#         target = left if i % 2 == 0 else right
+#         with target:
+#             selected = st.selectbox(
+#                 col,
+#                 options=["<не использовать>"] + DB_COLUMNS,
+#                 index=(
+#                     DB_COLUMNS.index(mapping[col]) + 1
+#                     if mapping[col] in DB_COLUMNS
+#                     else 0
+#                 ),
+#                 key=f"db_map_{col}"
+#             )
+#         mapping[col] = None if selected == "<не использовать>" else selected
+#
+#     st.session_state.db_column_mapping = mapping
+#
+#     col1, col2 = st.columns(2)
+#
+#     with col1:
+#         if st.button("Назад"):
+#             st.session_state.stage = STAGE_COMPARE
+#             st.rerun()
+#
+#     with col2:
+#         if st.button("Скачать файл для БД", type="primary"):
+#             st.session_state.stage = STAGE_DB_EXPORT
+#             st.rerun()
+
+def _build_export_df(df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
+    """
+    Формирует экспорт:
+    - Subclass_code, status первыми
+    - далее попарно: [source_col, mapped_db_col (дубликат)]
+    - если mapped_db_col == None -> только source_col
+    """
+    df = df.copy()
+
+    front = ["Subclass_code", "status"]
+    front = [c for c in front if c in df.columns]
+
+    export_cols = list(front)
+
+    # маппим только "рабочие" колонки, не служебные
+    mappable_cols = [c for c in df.columns if c not in ("Subclass_code", "status")]
+
+    for src_col in mappable_cols:
+        export_cols.append(src_col)
+
+        target_db = (db_map or {}).get(src_col)
+        if target_db:
+            # создаём дубликат с именем DB-колонки
+            df[target_db] = df[src_col]
+            export_cols.append(target_db)
+
+    export_cols = [c for c in export_cols if c in df.columns]
+    return df[export_cols]
+
+
+def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    buf.seek(0)
+    return buf.getvalue()
+
+
+# ==================================================
+# ============ STAGE 5 — DB MAPPING =================
+# ==================================================
 if st.session_state.stage == STAGE_DB_MAPPING:
 
-    st.subheader("Сопоставление столбцов нового источника и Базы Данных")
-    st.caption("Выберите, в какой столбец БД должен попасть каждый столбец результата")
+    st.subheader("Сопоставление столбцов результата и Базы Данных")
+    st.caption(
+        "Если выбрать «<нет соответствия>», колонка всё равно пойдёт в итоговый файл "
+        "и сохранит текущее имя."
+    )
 
     df = st.session_state.df_compare
-    source_columns = list(df.columns)
+    if df is None or df.empty:
+        st.error("Нет результата сравнения. Вернитесь на шаг сравнения.")
+        st.stop()
 
-    if st.session_state.db_column_mapping is None:
-        st.session_state.db_column_mapping = {c: None for c in source_columns}
+    # Рабочие колонки: логи + новые без пары (без служебных)
+    mappable_cols = [c for c in df.columns if c not in ("Subclass_code", "status")]
+    mappable_cols = list(dict.fromkeys(mappable_cols))  # на всякий случай убираем дубли
+
+    with st.expander("Список сопоставленных и новых столбцов", expanded=True):
+        st.write(mappable_cols)
+
+    # --- нормализуем / инициализируем mapping под текущий набор колонок ---
+    current_map = st.session_state.db_column_mapping or {}
+    # оставляем только актуальные ключи
+    current_map = {k: v for k, v in current_map.items() if k in mappable_cols}
+    # добавляем недостающие
+    for c in mappable_cols:
+        current_map.setdefault(c, None)
+    st.session_state.db_column_mapping = current_map
 
     mapping = st.session_state.db_column_mapping
+
     left, right = st.columns(2)
 
-    for i, col in enumerate(source_columns):
+    for i, col in enumerate(mappable_cols):
         target = left if i % 2 == 0 else right
         with target:
+            cur_val = mapping.get(col)
+
             selected = st.selectbox(
-                col,
-                options=["<не использовать>"] + DB_COLUMNS,
-                index=(
-                    DB_COLUMNS.index(mapping[col]) + 1
-                    if mapping[col] in DB_COLUMNS
-                    else 0
-                ),
-                key=f"db_map_{col}"
+                label=col,
+                options=["<нет соответствия>"] + DB_COLUMNS,
+                index=(DB_COLUMNS.index(cur_val) + 1) if cur_val in DB_COLUMNS else 0,
+                key=f"db_map_{col}",
             )
-        mapping[col] = None if selected == "<не использовать>" else selected
+
+        mapping[col] = None if selected == "<нет соответствия>" else selected
 
     st.session_state.db_column_mapping = mapping
 
+    st.markdown("---")
     col1, col2 = st.columns(2)
 
     with col1:
@@ -309,6 +427,37 @@ if st.session_state.stage == STAGE_DB_MAPPING:
             st.rerun()
 
     with col2:
-        if st.button("Скачать файл для БД", type="primary"):
+        if st.button("Сохранить сопоставление", type="primary"):
+            st.session_state.db_mapping_saved = True
             st.session_state.stage = STAGE_DB_EXPORT
             st.rerun()
+
+
+# ==================================================
+# ============ STAGE 6 — DB EXPORT ==================
+# ==================================================
+if st.session_state.stage == STAGE_DB_EXPORT:
+
+    st.subheader("Экспорт в Excel")
+
+    if not st.session_state.get("db_mapping_saved"):
+        st.warning("Сначала нажмите «Сохранить сопоставление».")
+        st.stop()
+
+    df = st.session_state.df_compare
+    db_map = st.session_state.db_column_mapping or {}
+
+    export_df = _build_export_df(df, db_map)
+    xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
+
+    st.download_button(
+        label="Скачать в excel",
+        data=xlsx_bytes,
+        file_name="shams_compare_for_review.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+
+    st.markdown("---")
+    if st.button("Назад к сопоставлению с БД"):
+        st.session_state.stage = STAGE_DB_MAPPING
+        st.rerun()
