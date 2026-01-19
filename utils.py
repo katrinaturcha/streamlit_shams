@@ -82,21 +82,23 @@ def normalize_subclass_raw(val):
 
 
 def normalize_text_for_compare(s: str) -> str:
-    """Нормализация текста для сравнения (tolower + только буквы/цифры)."""
+    """
+    Нормализация для сравнения:
+    - unicode normalize
+    - оставить только БУКВЫ и ЦИФРЫ (любой язык)
+    - lower
+    """
     if pd.isna(s):
         return ""
 
-        # 1) приводим к строке
     s = str(s)
-
-    # 2) нормализуем unicode (очищаем разные виды пробелов/точек)
     s = unicodedata.normalize("NFKD", s)
 
-    # 3) убираем все символы кроме A-Z a-z 0-9
-    s = re.sub(r"[^A-Za-z0-9]+", "", s)
+    # оставить только alnum (любой язык), выкинуть вообще все символы/пробелы/тире
+    s = "".join(ch for ch in s if ch.isalnum())
 
-    # 4) нижний регистр
     return s.lower()
+
 
 
 def normalize_subclass_simple(code):
