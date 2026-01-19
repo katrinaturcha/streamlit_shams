@@ -16,7 +16,6 @@ STAGE_MAPPING = "mapping"
 STAGE_COMPARE = "compare"
 STAGE_DB_MAPPING = "db_mapping"
 STAGE_DB_EXPORT = "db_export"
-# STAGE_SELECT_COMPARE_COLS = "select_compare_cols"
 
 
 
@@ -55,7 +54,6 @@ def init_state():
 
         "stage": STAGE_UPLOAD,
         "db_mapping_saved": False,
-        # "compare_cols_selected": None,
 
     }
     for k, v in defaults.items():
@@ -240,80 +238,6 @@ if st.session_state.stage == STAGE_MAPPING:
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
-# # ==================================================
-# # ===== STAGE 3.5 — SELECT COLUMNS TO COMPARE ======
-# # ==================================================
-# if st.session_state.stage == STAGE_SELECT_COMPARE_COLS:
-#
-#     st.subheader("Шаг 2.5 — какие столбцы сравнивать")
-#     st.caption("Сравнивается всегда: Description. Дополнительно выберите сопоставленные НЕчисловые столбцы.")
-#
-#     # парсим, чтобы понять типы колонок (нужно для фильтра НЕчисловых)
-#     if st.session_state.get("df_full_old_cache") is None or st.session_state.get("df_full_new_cache") is None:
-#         df_full_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
-#         df_full_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
-#         st.session_state.df_full_old_cache = df_full_old
-#         st.session_state.df_full_new_cache = df_full_new
-#     else:
-#         df_full_old = st.session_state.df_full_old_cache
-#         df_full_new = st.session_state.df_full_new_cache
-#
-#     mapping = st.session_state.column_mapping or {}
-#
-#     # кандидаты: только сопоставленные колонки
-#     mapped_new_cols = [new_col for new_col, old_col in mapping.items() if old_col]
-#
-#     def _is_numeric_like(series: pd.Series) -> bool:
-#         s = series.dropna()
-#         if s.empty:
-#             return False
-#         # пробуем преобразовать к числу
-#         conv = pd.to_numeric(s.astype(str).str.replace(",", ".", regex=False), errors="coerce")
-#         ratio = conv.notna().mean()
-#         return ratio >= 0.9  # 90% значений похожи на числа
-#
-#     # оставляем только НЕчисловые (по new-файлу; можно ужесточить, проверяя и old)
-#     non_numeric_candidates = []
-#     for new_col in mapped_new_cols:
-#         if new_col in df_full_new.columns:
-#             if not _is_numeric_like(df_full_new[new_col]):
-#                 non_numeric_candidates.append(new_col)
-#
-#     # UI чекбоксы
-#     prev = st.session_state.compare_cols_selected
-#     if prev is None:
-#         prev = list(non_numeric_candidates)
-#
-#     left, right = st.columns(2)
-#     temp_selected = []
-#
-#     for i, col in enumerate(non_numeric_candidates):
-#         target = left if i % 2 == 0 else right
-#         with target:
-#             checked = st.checkbox(col, value=(col in prev), key=f"cmp_{col}")
-#         if checked:
-#             temp_selected.append(col)
-#
-#     st.session_state.compare_cols_selected = temp_selected
-#
-#     st.markdown("---")
-#     col1, col2 = st.columns(2)
-#
-#     with col1:
-#         if st.button("Назад"):
-#             st.session_state.stage = STAGE_MAPPING
-#             st.rerun()
-#
-#     with col2:
-#         if st.button("Перейти к сравнению"):
-#             # сбрасываем результат сравнения
-#             st.session_state.df_compare = None
-#             st.session_state.compare_stats = None
-#             st.session_state.db_column_mapping = None
-#             st.session_state.db_mapping_saved = False
-#
-#             st.session_state.stage = STAGE_COMPARE
-#             st.rerun()
 
 # ==================================================
 # ============== STAGE 4 — COMPARE =================
@@ -335,12 +259,6 @@ if st.session_state.stage == STAGE_COMPARE:
             df_full_new,
             st.session_state.column_mapping
         )
-        # df_compare = compare_shams(
-        #     df_full_old,
-        #     df_full_new,
-        #     st.session_state.column_mapping,
-        #     compare_cols=st.session_state.compare_cols_selected or [],
-        # )
 
         st.session_state.df_compare = df_compare
         st.session_state.compare_stats = comparison_stats(df_compare)
@@ -426,29 +344,10 @@ def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict
 
 
 
-# def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
-#     buf = io.BytesIO()
-#     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-#         df.to_excel(writer, index=False, sheet_name=sheet_name)
-#     buf.seek(0)
-#     return buf.getvalue()
-
-def _to_excel_bytes(
-    export_df: pd.DataFrame,
-    df_sections: pd.DataFrame,
-    df_divisions: pd.DataFrame,
-    df_groups: pd.DataFrame,
-    df_classes: pd.DataFrame,
-    df_subclasses: pd.DataFrame,
-) -> bytes:
+def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
     buf = io.BytesIO()
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="for_review")
-        df_sections.to_excel(writer, index=False, sheet_name="sections")
-        df_divisions.to_excel(writer, index=False, sheet_name="divisions")
-        df_groups.to_excel(writer, index=False, sheet_name="groups")
-        df_classes.to_excel(writer, index=False, sheet_name="classes")
-        df_subclasses.to_excel(writer, index=False, sheet_name="subclasses")
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
     buf.seek(0)
     return buf.getvalue()
 
@@ -583,41 +482,13 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         st.warning("Сначала нажмите «Сохранить сопоставление».")
         st.stop()
 
-    df_compare = st.session_state.df_compare
-    if df_compare is None or df_compare.empty:
-        st.error("Нет данных для экспорта. Вернитесь на шаг сравнения.")
-        st.stop()
-
+    df = st.session_state.df_compare
     db_map = st.session_state.db_column_mapping or {}
 
-    # 1) Загружаем таблицу "БД" (shams_edit1.xlsx)
     db_df = load_db_df()
-    if db_df is None or db_df.empty:
-        st.error("Файл БД пустой или не загрузился.")
-        st.stop()
 
-    # 2) Собираем экспортный df (рядом: столбец результата + столбец из БД)
-    export_df = _build_export_df(df_compare, db_df, db_map)
-
-    # 3) Берём уровни (sections/divisions/groups/classes/subclasses) из НОВОГО файла
-    try:
-        _, df_sections, df_divisions, df_groups, df_classes, df_subclasses = parse_all_sheets_from_bytes(
-            st.session_state.shams2_bytes,
-            sheets=None
-        )
-    except Exception as e:
-        st.error(f"Не удалось распарсить уровни из shams2: {e}")
-        st.stop()
-
-    # 4) Экспорт в Excel (многолистный)
-    xlsx_bytes = _to_excel_bytes(
-        export_df=export_df,
-        df_sections=df_sections,
-        df_divisions=df_divisions,
-        df_groups=df_groups,
-        df_classes=df_classes,
-        df_subclasses=df_subclasses,
-    )
+    export_df = _build_export_df(df, db_df, db_map)
+    xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
 
     st.download_button(
         label="Скачать в excel",
@@ -627,47 +498,6 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     )
 
     st.markdown("---")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("Назад к сопоставлению с БД"):
-            st.session_state.stage = STAGE_DB_MAPPING
-            st.rerun()
-
-    with col2:
-        if st.button("Назад к сравнению"):
-            st.session_state.stage = STAGE_COMPARE
-            st.rerun()
-
-
-# ==================================================
-# ============ STAGE 6 — DB EXPORT ==================
-# ==================================================
-# if st.session_state.stage == STAGE_DB_EXPORT:
-#
-#     st.subheader("Экспорт в Excel")
-#
-#     if not st.session_state.get("db_mapping_saved"):
-#         st.warning("Сначала нажмите «Сохранить сопоставление».")
-#         st.stop()
-#
-#     df = st.session_state.df_compare
-#     db_map = st.session_state.db_column_mapping or {}
-#
-#     db_df = load_db_df()
-#
-#     export_df = _build_export_df(df, db_df, db_map)
-#     xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
-#
-#     st.download_button(
-#         label="Скачать в excel",
-#         data=xlsx_bytes,
-#         file_name="shams_compare_for_review.xlsx",
-#         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-#     )
-#
-#     st.markdown("---")
-#     if st.button("Назад к сопоставлению с БД"):
-#         st.session_state.stage = STAGE_DB_MAPPING
-#         st.rerun()
+    if st.button("Назад к сопоставлению с БД"):
+        st.session_state.stage = STAGE_DB_MAPPING
+        st.rerun()
