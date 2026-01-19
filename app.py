@@ -16,7 +16,7 @@ STAGE_MAPPING = "mapping"
 STAGE_COMPARE = "compare"
 STAGE_DB_MAPPING = "db_mapping"
 STAGE_DB_EXPORT = "db_export"
-STAGE_SELECT_COMPARE_COLS = "select_compare_cols"
+# STAGE_SELECT_COMPARE_COLS = "select_compare_cols"
 
 
 
@@ -55,7 +55,7 @@ def init_state():
 
         "stage": STAGE_UPLOAD,
         "db_mapping_saved": False,
-        "compare_cols_selected": None,
+        # "compare_cols_selected": None,
 
     }
     for k, v in defaults.items():
@@ -237,83 +237,83 @@ if st.session_state.stage == STAGE_MAPPING:
             st.session_state.compare_stats = None
             st.session_state.db_column_mapping = None
             st.session_state.db_mapping_saved = False
-            st.session_state.stage = STAGE_SELECT_COMPARE_COLS
-            st.rerun()
-
-# ==================================================
-# ===== STAGE 3.5 — SELECT COLUMNS TO COMPARE ======
-# ==================================================
-if st.session_state.stage == STAGE_SELECT_COMPARE_COLS:
-
-    st.subheader("Шаг 2.5 — какие столбцы сравнивать")
-    st.caption("Сравнивается всегда: Description. Дополнительно выберите сопоставленные НЕчисловые столбцы.")
-
-    # парсим, чтобы понять типы колонок (нужно для фильтра НЕчисловых)
-    if st.session_state.get("df_full_old_cache") is None or st.session_state.get("df_full_new_cache") is None:
-        df_full_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
-        df_full_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
-        st.session_state.df_full_old_cache = df_full_old
-        st.session_state.df_full_new_cache = df_full_new
-    else:
-        df_full_old = st.session_state.df_full_old_cache
-        df_full_new = st.session_state.df_full_new_cache
-
-    mapping = st.session_state.column_mapping or {}
-
-    # кандидаты: только сопоставленные колонки
-    mapped_new_cols = [new_col for new_col, old_col in mapping.items() if old_col]
-
-    def _is_numeric_like(series: pd.Series) -> bool:
-        s = series.dropna()
-        if s.empty:
-            return False
-        # пробуем преобразовать к числу
-        conv = pd.to_numeric(s.astype(str).str.replace(",", ".", regex=False), errors="coerce")
-        ratio = conv.notna().mean()
-        return ratio >= 0.9  # 90% значений похожи на числа
-
-    # оставляем только НЕчисловые (по new-файлу; можно ужесточить, проверяя и old)
-    non_numeric_candidates = []
-    for new_col in mapped_new_cols:
-        if new_col in df_full_new.columns:
-            if not _is_numeric_like(df_full_new[new_col]):
-                non_numeric_candidates.append(new_col)
-
-    # UI чекбоксы
-    prev = st.session_state.compare_cols_selected
-    if prev is None:
-        prev = list(non_numeric_candidates)
-
-    left, right = st.columns(2)
-    temp_selected = []
-
-    for i, col in enumerate(non_numeric_candidates):
-        target = left if i % 2 == 0 else right
-        with target:
-            checked = st.checkbox(col, value=(col in prev), key=f"cmp_{col}")
-        if checked:
-            temp_selected.append(col)
-
-    st.session_state.compare_cols_selected = temp_selected
-
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("Назад"):
-            st.session_state.stage = STAGE_MAPPING
-            st.rerun()
-
-    with col2:
-        if st.button("Перейти к сравнению"):
-            # сбрасываем результат сравнения
-            st.session_state.df_compare = None
-            st.session_state.compare_stats = None
-            st.session_state.db_column_mapping = None
-            st.session_state.db_mapping_saved = False
-
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
+
+# # ==================================================
+# # ===== STAGE 3.5 — SELECT COLUMNS TO COMPARE ======
+# # ==================================================
+# if st.session_state.stage == STAGE_SELECT_COMPARE_COLS:
+#
+#     st.subheader("Шаг 2.5 — какие столбцы сравнивать")
+#     st.caption("Сравнивается всегда: Description. Дополнительно выберите сопоставленные НЕчисловые столбцы.")
+#
+#     # парсим, чтобы понять типы колонок (нужно для фильтра НЕчисловых)
+#     if st.session_state.get("df_full_old_cache") is None or st.session_state.get("df_full_new_cache") is None:
+#         df_full_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
+#         df_full_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
+#         st.session_state.df_full_old_cache = df_full_old
+#         st.session_state.df_full_new_cache = df_full_new
+#     else:
+#         df_full_old = st.session_state.df_full_old_cache
+#         df_full_new = st.session_state.df_full_new_cache
+#
+#     mapping = st.session_state.column_mapping or {}
+#
+#     # кандидаты: только сопоставленные колонки
+#     mapped_new_cols = [new_col for new_col, old_col in mapping.items() if old_col]
+#
+#     def _is_numeric_like(series: pd.Series) -> bool:
+#         s = series.dropna()
+#         if s.empty:
+#             return False
+#         # пробуем преобразовать к числу
+#         conv = pd.to_numeric(s.astype(str).str.replace(",", ".", regex=False), errors="coerce")
+#         ratio = conv.notna().mean()
+#         return ratio >= 0.9  # 90% значений похожи на числа
+#
+#     # оставляем только НЕчисловые (по new-файлу; можно ужесточить, проверяя и old)
+#     non_numeric_candidates = []
+#     for new_col in mapped_new_cols:
+#         if new_col in df_full_new.columns:
+#             if not _is_numeric_like(df_full_new[new_col]):
+#                 non_numeric_candidates.append(new_col)
+#
+#     # UI чекбоксы
+#     prev = st.session_state.compare_cols_selected
+#     if prev is None:
+#         prev = list(non_numeric_candidates)
+#
+#     left, right = st.columns(2)
+#     temp_selected = []
+#
+#     for i, col in enumerate(non_numeric_candidates):
+#         target = left if i % 2 == 0 else right
+#         with target:
+#             checked = st.checkbox(col, value=(col in prev), key=f"cmp_{col}")
+#         if checked:
+#             temp_selected.append(col)
+#
+#     st.session_state.compare_cols_selected = temp_selected
+#
+#     st.markdown("---")
+#     col1, col2 = st.columns(2)
+#
+#     with col1:
+#         if st.button("Назад"):
+#             st.session_state.stage = STAGE_MAPPING
+#             st.rerun()
+#
+#     with col2:
+#         if st.button("Перейти к сравнению"):
+#             # сбрасываем результат сравнения
+#             st.session_state.df_compare = None
+#             st.session_state.compare_stats = None
+#             st.session_state.db_column_mapping = None
+#             st.session_state.db_mapping_saved = False
+#
+#             st.session_state.stage = STAGE_COMPARE
+#             st.rerun()
 
 # ==================================================
 # ============== STAGE 4 — COMPARE =================
@@ -330,17 +330,17 @@ if st.session_state.stage == STAGE_COMPARE:
             st.session_state.shams2_bytes, sheets=None
         )
 
-        # df_compare = compare_shams(
-        #     df_full_old,
-        #     df_full_new,
-        #     st.session_state.column_mapping
-        # )
         df_compare = compare_shams(
             df_full_old,
             df_full_new,
-            st.session_state.column_mapping,
-            compare_cols=st.session_state.compare_cols_selected or [],
+            st.session_state.column_mapping
         )
+        # df_compare = compare_shams(
+        #     df_full_old,
+        #     df_full_new,
+        #     st.session_state.column_mapping,
+        #     compare_cols=st.session_state.compare_cols_selected or [],
+        # )
 
         st.session_state.df_compare = df_compare
         st.session_state.compare_stats = comparison_stats(df_compare)
