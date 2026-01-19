@@ -23,6 +23,11 @@ st.set_page_config(layout="wide")
 
 BASE_DIR = Path(__file__).resolve().parent
 SHAMS_PATH = BASE_DIR / "shams.xlsx"
+DB_PATH = BASE_DIR / "shams_edit1.xlsx"
+if not DB_PATH.exists():
+    st.error("Файл shams_edit1.xlsx (имитация БД) не найден")
+    st.stop()
+
 
 if not SHAMS_PATH.exists():
     st.error("Файл shams.xlsx не найден")
@@ -328,34 +333,59 @@ if st.session_state.stage == STAGE_COMPARE:
 #             st.session_state.stage = STAGE_DB_EXPORT
 #             st.rerun()
 
-def _build_export_df(df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
+def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
     """
-    Формирует экспорт:
-    - Subclass_code, status первыми
-    - далее попарно: [source_col, mapped_db_col (дубликат)]
-    - если mapped_db_col == None -> только source_col
+    Экспорт:
+    - Subclass_code, status
+    - далее попарно: [source_col, mapped_db_col] (db_col берётся из db_df, НЕ копируется из source)
+    - db-колонки, которые ни с чем не сопоставили — добавляем в конец
     """
-    df = df.copy()
+    df_compare = df_compare.copy()
+    db_df = db_df.copy()
 
-    front = ["Subclass_code", "status"]
-    front = [c for c in front if c in df.columns]
+    # гарантируем ключи
+    if "Subclass_code" not in df_compare.columns:
+        raise ValueError("В df_compare нет Subclass_code")
+    if "Subclass_code" not in db_df.columns:
+        raise ValueError("В db_df нет Subclass_code")
+
+    # merge, чтобы значения БД подтянулись как есть
+    merged = df_compare.merge(db_df, on="Subclass_code", how="left", suffixes=("", "_db"))
+
+    front = [c for c in ["Subclass_code", "status"] if c in merged.columns]
+
+    # колонки сравнения (то, что менеджер смотрит)
+    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
 
     export_cols = list(front)
 
-    # маппим только "рабочие" колонки, не служебные
-    mappable_cols = [c for c in df.columns if c not in ("Subclass_code", "status")]
+    mapped_db_cols_used = set()
 
-    for src_col in mappable_cols:
+    for src_col in compare_cols:
         export_cols.append(src_col)
 
         target_db = (db_map or {}).get(src_col)
         if target_db:
-            # создаём дубликат с именем DB-колонки
-            df[target_db] = df[src_col]
-            export_cols.append(target_db)
+            # берём именно колонку из БД (уже в merged)
+            if target_db in merged.columns:
+                export_cols.append(target_db)
+                mapped_db_cols_used.add(target_db)
+            else:
+                # если сопоставили с DB_COLUMNS, но в файле БД такой колонки нет
+                # оставляем место, но не ломаем
+                merged[target_db] = pd.NA
+                export_cols.append(target_db)
+                mapped_db_cols_used.add(target_db)
 
-    export_cols = [c for c in export_cols if c in df.columns]
-    return df[export_cols]
+    # добавить несопоставленные db-колонки в конец (со своими значениями)
+    db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in mapped_db_cols_used]
+    export_cols += db_extra
+
+    # итог — без дублей, только существующие
+    export_cols = [c for c in export_cols if c in merged.columns]
+
+    return merged[export_cols]
+
 
 
 def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
@@ -364,6 +394,38 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     buf.seek(0)
     return buf.getvalue()
+
+import re
+
+def _normalize_code(val):
+    if pd.isna(val):
+        return None
+    s = re.sub(r"[^0-9]", "", str(val))
+    if len(s) < 5:
+        return None
+    return f"{s[:4]}.{s[4:].ljust(2,'0')[:2]}"
+
+def load_db_df() -> pd.DataFrame:
+    """Читает shams_edit1.xlsx и гарантирует наличие Subclass_code."""
+    df_db = pd.read_excel(DB_PATH)
+
+    # 1) если уже есть Subclass_code — используем
+    if "Subclass_code" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Subclass_code"].apply(_normalize_code)
+        return df_db
+
+    # 2) если есть колонка как в старом edit-файле
+    if "Введите код бизнес-деятельности" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Введите код бизнес-деятельности"].apply(_normalize_code)
+        return df_db
+
+    # 3) если есть просто Subclass
+    if "Subclass" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Subclass"].apply(_normalize_code)
+        return df_db
+
+    raise ValueError("В shams_edit1.xlsx не найден ключевой столбец (Subclass_code / Subclass / 'Введите код бизнес-деятельности').")
+
 
 
 # ==================================================
@@ -467,7 +529,9 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     df = st.session_state.df_compare
     db_map = st.session_state.db_column_mapping or {}
 
-    export_df = _build_export_df(df, db_map)
+    db_df = load_db_df()
+
+    export_df = _build_export_df(df, db_df, db_map)
     xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
 
     st.download_button(
