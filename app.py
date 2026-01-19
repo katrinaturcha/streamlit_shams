@@ -428,6 +428,9 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     # По ТЗ: обязательно status + все колонки-логи + новые колонки без соответствия
     cols_to_map = []
 
+    if "Subclass_code" in df.columns:
+        cols_to_map.append("Subclass_code")
+
     if "status" in df.columns:
         cols_to_map.append("status")
 
