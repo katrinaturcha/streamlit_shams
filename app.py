@@ -382,38 +382,58 @@ if st.session_state.stage == STAGE_DB_MAPPING:
         st.error("Нет результата сравнения. Вернитесь на шаг сравнения.")
         st.stop()
 
-    # Рабочие колонки: логи + новые без пары (без служебных)
-    mappable_cols = [c for c in df.columns if c not in ("Subclass_code", "status")]
-    mappable_cols = list(dict.fromkeys(mappable_cols))  # на всякий случай убираем дубли
+    # --- страховка: если df_compare посчитан старой логикой (есть *_old/_new) ---
+    legacy_cols = [c for c in df.columns if c.endswith("_old") or c.endswith("_new") or c == "diff_columns"]
+    if legacy_cols:
+        st.warning(
+            "Похоже, результат сравнения был посчитан старой логикой (найдены *_old/_new или diff_columns). "
+            "Пересчитываю сравнение заново..."
+        )
+        st.session_state.df_compare = None
+        st.session_state.compare_stats = None
+        st.session_state.stage = STAGE_COMPARE
+        st.rerun()
+
+    # --- формируем список колонок для сопоставления ---
+    # По ТЗ: обязательно status + все колонки-логи + новые колонки без соответствия
+    cols_to_map = []
+
+    if "status" in df.columns:
+        cols_to_map.append("status")
+
+    # все кроме ключа и status
+    other = [c for c in df.columns if c not in ("Subclass_code", "status")]
+
+    # (опционально, но полезно) сортировка: сначала логи, потом обычные "новые без пары"
+    log_cols = [c for c in other if c.endswith(". Лог изменений")]
+    new_cols = [c for c in other if not c.endswith(". Лог изменений")]
+
+    cols_to_map += log_cols + new_cols
+    cols_to_map = list(dict.fromkeys(cols_to_map))  # убираем дубли, сохраняя порядок
 
     with st.expander("Список сопоставленных и новых столбцов", expanded=True):
-        st.write(mappable_cols)
+        st.write(cols_to_map)
 
-    # --- нормализуем / инициализируем mapping под текущий набор колонок ---
+    # --- init/normalize mapping ---
     current_map = st.session_state.db_column_mapping or {}
-    # оставляем только актуальные ключи
-    current_map = {k: v for k, v in current_map.items() if k in mappable_cols}
-    # добавляем недостающие
-    for c in mappable_cols:
+    current_map = {k: v for k, v in current_map.items() if k in cols_to_map}
+    for c in cols_to_map:
         current_map.setdefault(c, None)
     st.session_state.db_column_mapping = current_map
-
     mapping = st.session_state.db_column_mapping
 
     left, right = st.columns(2)
 
-    for i, col in enumerate(mappable_cols):
+    for i, col in enumerate(cols_to_map):
         target = left if i % 2 == 0 else right
         with target:
             cur_val = mapping.get(col)
-
             selected = st.selectbox(
                 label=col,
                 options=["<нет соответствия>"] + DB_COLUMNS,
                 index=(DB_COLUMNS.index(cur_val) + 1) if cur_val in DB_COLUMNS else 0,
                 key=f"db_map_{col}",
             )
-
         mapping[col] = None if selected == "<нет соответствия>" else selected
 
     st.session_state.db_column_mapping = mapping
