@@ -333,55 +333,149 @@ if st.session_state.stage == STAGE_COMPARE:
 #             st.session_state.stage = STAGE_DB_EXPORT
 #             st.rerun()
 
+# def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
+#     """
+#     Экспорт:
+#     - Subclass_code, status
+#     - далее попарно: [source_col, mapped_db_col] (db_col берётся из db_df, НЕ копируется из source)
+#     - db-колонки, которые ни с чем не сопоставили — добавляем в конец
+#     """
+#     df_compare = df_compare.copy()
+#     db_df = db_df.copy()
+#
+#     # гарантируем ключи
+#     if "Subclass_code" not in df_compare.columns:
+#         raise ValueError("В df_compare нет Subclass_code")
+#     if "Subclass_code" not in db_df.columns:
+#         raise ValueError("В db_df нет Subclass_code")
+#
+#     # merge, чтобы значения БД подтянулись как есть
+#     merged = df_compare.merge(db_df, on="Subclass_code", how="left", suffixes=("", "_db"))
+#
+#     front = [c for c in ["Subclass_code", "status"] if c in merged.columns]
+#
+#     # колонки сравнения (то, что менеджер смотрит)
+#     compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
+#
+#     export_cols = list(front)
+#
+#     mapped_db_cols_used = set()
+#
+#     for src_col in compare_cols:
+#         export_cols.append(src_col)
+#
+#         target_db = (db_map or {}).get(src_col)
+#         if target_db:
+#             # берём именно колонку из БД (уже в merged)
+#             if target_db in merged.columns:
+#                 export_cols.append(target_db)
+#                 mapped_db_cols_used.add(target_db)
+#             else:
+#                 # если сопоставили с DB_COLUMNS, но в файле БД такой колонки нет
+#                 # оставляем место, но не ломаем
+#                 merged[target_db] = pd.NA
+#                 export_cols.append(target_db)
+#                 mapped_db_cols_used.add(target_db)
+#
+#     # добавить несопоставленные db-колонки в конец (со своими значениями)
+#     db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in mapped_db_cols_used]
+#     export_cols += db_extra
+#
+#     # итог — без дублей, только существующие
+#     export_cols = [c for c in export_cols if c in merged.columns]
+#
+#     return merged[export_cols]
 def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
     """
-    Экспорт:
-    - Subclass_code, status
-    - далее попарно: [source_col, mapped_db_col] (db_col берётся из db_df, НЕ копируется из source)
-    - db-колонки, которые ни с чем не сопоставили — добавляем в конец
+    Собирает DataFrame для выгрузки "for_review":
+
+    Вход:
+      - df_compare: результат compare_shams (обяз: Subclass_code, status, + колонки сравнения/логи)
+      - db_df: таблица "БД" (shams_edit1.xlsx) с реальными значениями (обяз: Subclass_code)
+      - db_map: { source_col_in_compare: db_col_name | None }
+
+    Выход:
+      - Subclass_code, Subclass, status (если есть)
+      - далее по порядку: source_col, рядом mapped db_col (значения берутся ИЗ db_df, не копируются)
+      - все db-колонки, которые ни с чем не сопоставили — добавляются в конец
     """
+    if df_compare is None or df_compare.empty:
+        return df_compare
+
     df_compare = df_compare.copy()
     db_df = db_df.copy()
 
-    # гарантируем ключи
     if "Subclass_code" not in df_compare.columns:
         raise ValueError("В df_compare нет Subclass_code")
     if "Subclass_code" not in db_df.columns:
         raise ValueError("В db_df нет Subclass_code")
 
-    # merge, чтобы значения БД подтянулись как есть
-    merged = df_compare.merge(db_df, on="Subclass_code", how="left", suffixes=("", "_db"))
+    # --- нормализуем имена колонок (на всякий случай) ---
+    df_compare.columns = [str(c).strip() for c in df_compare.columns]
+    db_df.columns = [str(c).strip() for c in db_df.columns]
 
-    front = [c for c in ["Subclass_code", "status"] if c in merged.columns]
+    # --- подмешаем Subclass из df_compare, если есть (по ТЗ его надо видеть) ---
+    # (если у тебя Subclass уже есть в df_compare — отлично, просто выведем его рядом)
+    # если Subclass хранится только в db_df — тоже выведем.
+    # Итог: в "front" попадёт то, что реально существует после merge.
+    merged = df_compare.merge(
+        db_df,
+        on="Subclass_code",
+        how="left",
+        suffixes=("", "_dbdup"),  # защищаемся от дублей одинаковых имен
+    )
 
-    # колонки сравнения (то, что менеджер смотрит)
-    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
+    # если появились *_dbdup из-за совпадающих имён — оставляем приоритет за df_compare
+    # (а db-версию считаем "дополнительной" и будем выводить только если её явно выбрали)
+    # поэтому ничего не переименовываем автоматически.
+
+    # --- front columns ---
+    front = []
+    for c in ["Subclass_code", "Subclass", "status"]:
+        if c in merged.columns and c not in front:
+            front.append(c)
+
+    # --- какие колонки из df_compare считаем "источником" для просмотра ---
+    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "Subclass", "status")]
 
     export_cols = list(front)
 
-    mapped_db_cols_used = set()
+    # чтобы не добавлять одну и ту же db-колонку много раз
+    used_db_cols = set()
 
+    def _safe_add(colname: str):
+        if colname in merged.columns and colname not in export_cols:
+            export_cols.append(colname)
+
+    # 1) добавляем пары: source_col + mapped_db_col (значения db_col берём из merged -> из db_df)
     for src_col in compare_cols:
-        export_cols.append(src_col)
+        _safe_add(src_col)
 
         target_db = (db_map or {}).get(src_col)
-        if target_db:
-            # берём именно колонку из БД (уже в merged)
-            if target_db in merged.columns:
-                export_cols.append(target_db)
-                mapped_db_cols_used.add(target_db)
-            else:
-                # если сопоставили с DB_COLUMNS, но в файле БД такой колонки нет
-                # оставляем место, но не ломаем
-                merged[target_db] = pd.NA
-                export_cols.append(target_db)
-                mapped_db_cols_used.add(target_db)
+        if not target_db:
+            continue
 
-    # добавить несопоставленные db-колонки в конец (со своими значениями)
-    db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in mapped_db_cols_used]
-    export_cols += db_extra
+        target_db = str(target_db).strip()
 
-    # итог — без дублей, только существующие
+        if target_db in merged.columns:
+            _safe_add(target_db)
+            used_db_cols.add(target_db)
+        else:
+            # если пользователь выбрал DB_COLUMNS, но в db_df нет такого столбца
+            # добавим пустую колонку, чтобы структура была стабильной
+            merged[target_db] = pd.NA
+            _safe_add(target_db)
+            used_db_cols.add(target_db)
+
+    # 2) добавляем "несопоставленные" колонки из БД в конец (со своими значениями)
+    db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in used_db_cols]
+
+    # не добавляем то, что уже есть как source_col / front
+    for c in db_extra:
+        if c not in export_cols and c in merged.columns:
+            export_cols.append(c)
+
+    # финальная защита: только существующие
     export_cols = [c for c in export_cols if c in merged.columns]
 
     return merged[export_cols]
@@ -395,6 +489,40 @@ def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
     buf.seek(0)
     return buf.getvalue()
 
+import re
+
+def _normalize_code(val):
+    if pd.isna(val):
+        return None
+    s = re.sub(r"[^0-9]", "", str(val))
+    if len(s) < 5:
+        return None
+    return f"{s[:4]}.{s[4:].ljust(2,'0')[:2]}"
+
+
+def load_db_df() -> pd.DataFrame:
+    """Читает shams_edit1.xlsx и гарантирует наличие Subclass_code."""
+    df_db = pd.read_excel(DB_PATH)
+
+    # 1) если уже есть Subclass_code
+    if "Subclass_code" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Subclass_code"].apply(_normalize_code)
+        return df_db
+
+    # 2) стандартный столбец edit-файла
+    if "Введите код бизнес-деятельности" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Введите код бизнес-деятельности"].apply(_normalize_code)
+        return df_db
+
+    # 3) fallback
+    if "Subclass" in df_db.columns:
+        df_db["Subclass_code"] = df_db["Subclass"].apply(_normalize_code)
+        return df_db
+
+    raise ValueError(
+        "В shams_edit1.xlsx не найден ключевой столбец "
+        "(Subclass_code / Subclass / 'Введите код бизнес-деятельности')"
+    )
 
 # ==================================================
 # ============ STAGE 5 — DB MAPPING =================
@@ -485,7 +613,6 @@ if st.session_state.stage == STAGE_DB_MAPPING:
             st.session_state.stage = STAGE_DB_EXPORT
             st.rerun()
 
-
 # ==================================================
 # ============ STAGE 6 — DB EXPORT ==================
 # ==================================================
@@ -497,11 +624,44 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         st.warning("Сначала нажмите «Сохранить сопоставление».")
         st.stop()
 
-    df = st.session_state.df_compare
+    df_compare = st.session_state.df_compare
+    if df_compare is None or df_compare.empty:
+        st.error("Нет данных для экспорта. Вернитесь на шаг сравнения.")
+        st.stop()
+
     db_map = st.session_state.db_column_mapping or {}
 
-    export_df = _build_export_df(df, db_map)
-    xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
+    # 1) Загружаем таблицу "БД" (shams_edit1.xlsx)
+    db_df = load_db_df()
+    if db_df is None or db_df.empty:
+        st.error("Файл БД пустой или не загрузился.")
+        st.stop()
+
+    # 2) Собираем экспортный df (рядом: столбец результата + столбец из БД)
+    export_df = _build_export_df(df_compare, db_df, db_map)
+
+    # 3) Парсим уровни (Section/Division/Group/Class) из нового файла (shams2)
+    try:
+        _, df_sections, df_divisions, df_groups, df_classes, _ = parse_all_sheets_from_bytes(
+            st.session_state.shams2_bytes, sheets=None
+        )
+    except Exception as e:
+        st.error(f"Не удалось распарсить уровни из shams2: {e}")
+        st.stop()
+
+    # 4) Пишем многолистный Excel
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="for_review")
+
+        # уровни отдельными листами
+        df_sections.to_excel(writer, index=False, sheet_name="sections")
+        df_divisions.to_excel(writer, index=False, sheet_name="divisions")
+        df_groups.to_excel(writer, index=False, sheet_name="groups")
+        df_classes.to_excel(writer, index=False, sheet_name="classes")
+
+    buf.seek(0)
+    xlsx_bytes = buf.getvalue()
 
     st.download_button(
         label="Скачать в excel",
@@ -514,3 +674,32 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     if st.button("Назад к сопоставлению с БД"):
         st.session_state.stage = STAGE_DB_MAPPING
         st.rerun()
+
+# # ==================================================
+# # ============ STAGE 6 — DB EXPORT ==================
+# # ==================================================
+# if st.session_state.stage == STAGE_DB_EXPORT:
+#
+#     st.subheader("Экспорт в Excel")
+#
+#     if not st.session_state.get("db_mapping_saved"):
+#         st.warning("Сначала нажмите «Сохранить сопоставление».")
+#         st.stop()
+#
+#     df = st.session_state.df_compare
+#     db_map = st.session_state.db_column_mapping or {}
+#
+#     export_df = _build_export_df(df, db_map)
+#     xlsx_bytes = _to_excel_bytes(export_df, sheet_name="for_review")
+#
+#     st.download_button(
+#         label="Скачать в excel",
+#         data=xlsx_bytes,
+#         file_name="shams_compare_for_review.xlsx",
+#         mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+#     )
+#
+#     st.markdown("---")
+#     if st.button("Назад к сопоставлению с БД"):
+#         st.session_state.stage = STAGE_DB_MAPPING
+#         st.rerun()
