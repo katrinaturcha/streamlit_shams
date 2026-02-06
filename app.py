@@ -558,14 +558,12 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     if "Subclass" in df.columns:
         cols_to_map.append("Subclass")
 
-    # остальные рабочие колонки
+    # все рабочие колонки результата сравнения (без ключа и status)
     other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
 
-    # сначала логи, потом обычные колонки (new-only)
-    log_cols = [c for c in other if c.endswith(". Лог изменений")]
-    new_cols = [c for c in other if not c.endswith(". Лог изменений")]
-
-    cols_to_map += log_cols + new_cols
+    # теперь ВСЕ эти колонки — "логи"/результаты для менеджера
+    # (потому что compare.py пишет лог прямо в колонку с обычным именем)
+    cols_to_map += other
 
     # убрать дубли, сохранить порядок
     cols_to_map = list(dict.fromkeys(cols_to_map))

@@ -97,7 +97,7 @@ def compare_shams(
     # Description = Subclass_en
     BASE_OLD = "Subclass_en_old"
     BASE_NEW = "Subclass_en_new"
-    LOG_DESC = "Description. Лог изменений"
+    LOG_DESC = "Description"
 
     # суффиксы
     df_old = df_old.add_suffix("_old").rename(columns={"Subclass_code_old": "Subclass_code"})
@@ -152,7 +152,7 @@ def compare_shams(
 
     log_cols = []
     for old_col, new_col in mapped_pairs_to_compare:
-        log_name = f"{new_col}. Лог изменений"
+        log_name = new_col
         log_cols.append(log_name)
         df[log_name] = df.apply(
             lambda r, oc=old_col, nc=new_col: _fmt_log(
