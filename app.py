@@ -282,7 +282,7 @@ if st.session_state.stage == STAGE_COMPARE:
             st.rerun()
 
     with col2:
-        if st.button("Актуализировать в БД", type="primary"):
+        if st.button("Выгрузить в эксель для работы с обновлениями", type="primary"):
             st.session_state.stage = STAGE_DB_MAPPING
             st.rerun()
 
