@@ -127,17 +127,14 @@ if st.session_state.stage == STAGE_SELECT_HEADERS:
     headers = st.session_state.headers_new or []
     prev_selected = st.session_state.headers_new_selected or []
 
-    left, right = st.columns(2)
     temp_selected = []
 
-    for i, col in enumerate(headers):
-        target = left if i % 2 == 0 else right
-        with target:
-            checked = st.checkbox(
-                col,
-                value=(col in prev_selected),
-                key=f"chk_{col}"
-            )
+    for col in headers:
+        checked = st.checkbox(
+            col,
+            value=(col in prev_selected),
+            key=f"chk_{col}"
+        )
         if checked:
             temp_selected.append(col)
 
