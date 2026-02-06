@@ -551,10 +551,9 @@ if st.session_state.stage == STAGE_DB_MAPPING:
 
     # --- формируем список колонок, которые реально маппим к БД ---
     # ТЗ: status обязателен, Subclass обязателен, + логи и новые колонки (без ключа)
+    # --- формируем список колонок, которые реально маппим к БД ---
+    # ТЗ: Subclass обязателен, status НЕ маппим, + логи и новые колонки
     cols_to_map = []
-
-    if "status" in df.columns:
-        cols_to_map.append("status")
 
     if "Subclass" in df.columns:
         cols_to_map.append("Subclass")
