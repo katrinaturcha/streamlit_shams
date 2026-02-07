@@ -536,6 +536,7 @@ if st.session_state.stage == STAGE_DB_EXPORT:
 
     # 2) Собираем экспортный df (рядом: столбец результата + столбец из БД)
     export_df = _build_export_df(df_compare, db_df, db_map)
+    export_df = export_df.drop(columns=["Subclass"], errors="ignore")
 
     # 3) Парсим уровни (Section/Division/Group/Class) из нового файла (shams2)
     try:
