@@ -47,9 +47,9 @@ def _fmt_log(status: str, old_val, new_val) -> str:
     if status == "changed":
         return f"OLD: {old_s}\nNEW: {new_s}".strip()
     if status == "deleted":
-        return f"OLD: {old_s}".strip() if old_s else ""
+        return old_s.strip() if old_s else ""
     if status == "added":
-        return f"NEW: {new_s}".strip() if new_s else ""
+        return new_s.strip() if new_s else ""
     return ""
 
 
