@@ -4,11 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="new_bytes">
-      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="subclass">
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/compare.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -277,7 +275,23 @@
       <option name="project" value="LOCAL" />
       <updated>1766735231792</updated>
     </task>
-    <option name="localTasksCounter" value="26" />
+    <task id="LOCAL-00026" summary="new_bytes">
+      <option name="closed" value="true" />
+      <created>1770482266328</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482266328</updated>
+    </task>
+    <task id="LOCAL-00027" summary="subclass">
+      <option name="closed" value="true" />
+      <created>1770482563714</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1770482563714</updated>
+    </task>
+    <option name="localTasksCounter" value="28" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -300,6 +314,7 @@
     <MESSAGE value="dialog_upload_file_columns" />
     <MESSAGE value="dialog_upload_file_columns_" />
     <MESSAGE value="new_bytes" />
-    <option name="LAST_COMMIT_MESSAGE" value="new_bytes" />
+    <MESSAGE value="subclass" />
+    <option name="LAST_COMMIT_MESSAGE" value="subclass" />
   </component>
 </project>

@@ -287,101 +287,7 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 # ============ STAGE 5 — DB MAPPING =================
 # ==================================================
-# if st.session_state.stage == STAGE_DB_MAPPING:
-#
-#     st.subheader("Сопоставление столбцов нового источника и Базы Данных")
-#     st.caption("Выберите, в какой столбец БД должен попасть каждый столбец результата")
-#
-#     df = st.session_state.df_compare
-#     source_columns = list(df.columns)
-#
-#     if st.session_state.db_column_mapping is None:
-#         st.session_state.db_column_mapping = {c: None for c in source_columns}
-#
-#     mapping = st.session_state.db_column_mapping
-#     left, right = st.columns(2)
-#
-#     for i, col in enumerate(source_columns):
-#         target = left if i % 2 == 0 else right
-#         with target:
-#             selected = st.selectbox(
-#                 col,
-#                 options=["<не использовать>"] + DB_COLUMNS,
-#                 index=(
-#                     DB_COLUMNS.index(mapping[col]) + 1
-#                     if mapping[col] in DB_COLUMNS
-#                     else 0
-#                 ),
-#                 key=f"db_map_{col}"
-#             )
-#         mapping[col] = None if selected == "<не использовать>" else selected
-#
-#     st.session_state.db_column_mapping = mapping
-#
-#     col1, col2 = st.columns(2)
-#
-#     with col1:
-#         if st.button("Назад"):
-#             st.session_state.stage = STAGE_COMPARE
-#             st.rerun()
-#
-#     with col2:
-#         if st.button("Скачать файл для БД", type="primary"):
-#             st.session_state.stage = STAGE_DB_EXPORT
-#             st.rerun()
 
-# def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
-#     """
-#     Экспорт:
-#     - Subclass_code, status
-#     - далее попарно: [source_col, mapped_db_col] (db_col берётся из db_df, НЕ копируется из source)
-#     - db-колонки, которые ни с чем не сопоставили — добавляем в конец
-#     """
-#     df_compare = df_compare.copy()
-#     db_df = db_df.copy()
-#
-#     # гарантируем ключи
-#     if "Subclass_code" not in df_compare.columns:
-#         raise ValueError("В df_compare нет Subclass_code")
-#     if "Subclass_code" not in db_df.columns:
-#         raise ValueError("В db_df нет Subclass_code")
-#
-#     # merge, чтобы значения БД подтянулись как есть
-#     merged = df_compare.merge(db_df, on="Subclass_code", how="left", suffixes=("", "_db"))
-#
-#     front = [c for c in ["Subclass_code", "status"] if c in merged.columns]
-#
-#     # колонки сравнения (то, что менеджер смотрит)
-#     compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
-#
-#     export_cols = list(front)
-#
-#     mapped_db_cols_used = set()
-#
-#     for src_col in compare_cols:
-#         export_cols.append(src_col)
-#
-#         target_db = (db_map or {}).get(src_col)
-#         if target_db:
-#             # берём именно колонку из БД (уже в merged)
-#             if target_db in merged.columns:
-#                 export_cols.append(target_db)
-#                 mapped_db_cols_used.add(target_db)
-#             else:
-#                 # если сопоставили с DB_COLUMNS, но в файле БД такой колонки нет
-#                 # оставляем место, но не ломаем
-#                 merged[target_db] = pd.NA
-#                 export_cols.append(target_db)
-#                 mapped_db_cols_used.add(target_db)
-#
-#     # добавить несопоставленные db-колонки в конец (со своими значениями)
-#     db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in mapped_db_cols_used]
-#     export_cols += db_extra
-#
-#     # итог — без дублей, только существующие
-#     export_cols = [c for c in export_cols if c in merged.columns]
-#
-#     return merged[export_cols]
 def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
     """
     Собирает DataFrame для выгрузки "for_review":
@@ -428,12 +334,12 @@ def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict
 
     # --- front columns ---
     front = []
-    for c in ["Subclass_code", "Subclass", "status"]:
+    for c in ["Subclass_code", "status"]:
         if c in merged.columns and c not in front:
             front.append(c)
 
     # --- какие колонки из df_compare считаем "источником" для просмотра ---
-    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "Subclass", "status")]
+    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
 
     export_cols = list(front)
 
@@ -549,35 +455,19 @@ if st.session_state.stage == STAGE_DB_MAPPING:
         st.session_state.stage = STAGE_COMPARE
         st.rerun()
 
-    # --- формируем список колонок, которые реально маппим к БД ---
-    # ТЗ: status обязателен, Subclass обязателен, + логи и новые колонки (без ключа)
-    # --- формируем список колонок, которые реально маппим к БД ---
-    # ТЗ: Subclass обязателен, status НЕ маппим, + логи и новые колонки
+    # --- формируем список колонок для сопоставления с БД ---
     cols_to_map = []
 
-    if "Subclass" in df.columns:
-        cols_to_map.append("Subclass")
+    # 1) обязательно Subclass_code (status НЕ маппим, Subclass НЕ маппим)
+    if "Subclass_code" in df.columns:
+        cols_to_map.append("Subclass_code")
 
-    # все рабочие колонки результата сравнения (без ключа и status)
-    # other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
-    #
-    # # теперь ВСЕ эти колонки — "логи"/результаты для менеджера
-    # # (потому что compare.py пишет лог прямо в колонку с обычным именем)
-    # cols_to_map += other
-    cols_to_map = []
-
-    # обязательно показать Subclass, если он есть
-    if "Subclass" in df.columns:
-        cols_to_map.append("Subclass")
-        #
-
-    # остальные колонки результата сравнения (без ключа и status)
+    # 2) всё остальное из результата сравнения, кроме служебных
     other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
 
-    # Description первым, если есть
+    # 3) Description первым среди "other"
     if "Description" in other:
-        cols_to_map.append("Description")
-        other = [c for c in other if c != "Description"]
+        other = ["Description"] + [c for c in other if c != "Description"]
 
     cols_to_map += other
 

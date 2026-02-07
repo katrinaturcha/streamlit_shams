@@ -191,7 +191,8 @@ def compare_shams(
             new_only_out_cols.append(out_name)
 
     # итог
-    final_cols = ["Subclass_code", "Subclass", "status", LOG_DESC] + log_cols + new_only_out_cols
+    # удалить блок after merge про Subclass
+    final_cols = ["Subclass_code", "status", LOG_DESC] + log_cols + new_only_out_cols
     final_cols = [c for c in final_cols if c in df.columns]
     return df[final_cols]
 
