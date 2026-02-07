@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pandas as pd
 
 from utils import normalize_text_for_compare, normalize_subclass_simple
@@ -104,7 +106,12 @@ def compare_shams(
     df_new = df_new.add_suffix("_new").rename(columns={"Subclass_code_new": "Subclass_code"})
 
     df = pd.merge(df_old, df_new, on="Subclass_code", how="outer", indicator=True)
-
+    # после merge добавляем Subclass (для сопоставления с БД)
+    # берём из нового файла, если есть; иначе из старого
+    if "Subclass_new" in df.columns:
+        df["Subclass"] = df["Subclass_new"]
+    elif "Subclass_old" in df.columns:
+        df["Subclass"] = df["Subclass_old"]
     # первичный статус
     def _initial_status(row):
         if row["_merge"] == "left_only":
@@ -184,7 +191,7 @@ def compare_shams(
             new_only_out_cols.append(out_name)
 
     # итог
-    final_cols = ["Subclass_code", "status", LOG_DESC] + log_cols + new_only_out_cols
+    final_cols = ["Subclass_code", "Subclass", "status", LOG_DESC] + log_cols + new_only_out_cols
     final_cols = [c for c in final_cols if c in df.columns]
     return df[final_cols]
 
