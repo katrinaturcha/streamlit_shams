@@ -569,6 +569,7 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     # обязательно показать Subclass, если он есть
     if "Subclass" in df.columns:
         cols_to_map.append("Subclass")
+        #
 
     # остальные колонки результата сравнения (без ключа и status)
     other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
