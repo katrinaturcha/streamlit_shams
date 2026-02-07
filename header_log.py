@@ -66,12 +66,6 @@ def extract_headers_from_main_table(file_bytes: bytes, sheets=None):
                 col_clean = str(col).replace("\u00A0", " ").replace("\n", " ").replace("\r", " ")
                 col_clean = " ".join(col_clean.split()).strip()
 
-                # --- ДОБАВИТЬ ---
-                col_clean_low = col_clean.lower()
-                if col_clean_low == "описание":
-                    col_clean = "Description"
-                # --- /ДОБАВИТЬ ---
-
                 unique_headers.append(col_clean)
 
     return unique_headers
@@ -138,8 +132,7 @@ def build_header_change_log_from_bytes(
 ):
     h1 = extract_headers_from_main_table(shams1_bytes, sheets)
     h2 = extract_headers_from_main_table(shams2_bytes, sheets)
-    print("Описание в old?", "Описание" in h1)
-    print("Описание в new?", "Описание" in h2)
+
     log_df = compare_headers(h1, h2, provider="Shams Provider")
 
     return h1, h2, log_df
