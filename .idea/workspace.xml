@@ -4,7 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="delete_subclass" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="NEW_OLD">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+    </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
     <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
@@ -304,7 +306,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770487129180</updated>
     </task>
-    <option name="localTasksCounter" value="30" />
+    <task id="LOCAL-00030" summary="NEW_OLD">
+      <option name="closed" value="true" />
+      <created>1770487619238</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1770487619238</updated>
+    </task>
+    <option name="localTasksCounter" value="31" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -330,6 +340,7 @@
     <MESSAGE value="subclass" />
     <MESSAGE value="subclass_code" />
     <MESSAGE value="delete_subclass" />
-    <option name="LAST_COMMIT_MESSAGE" value="delete_subclass" />
+    <MESSAGE value="NEW_OLD" />
+    <option name="LAST_COMMIT_MESSAGE" value="NEW_OLD" />
   </component>
 </project>
