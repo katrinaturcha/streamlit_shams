@@ -292,6 +292,13 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 from openpyxl.styles import PatternFill
 
+def _norm_col(x: str) -> str:
+    if x is None:
+        return ""
+    s = str(x).replace("\u00A0", " ")
+    s = " ".join(s.split())
+    return s.strip().lower()
+
 def write_excel_with_highlight(
     buf: io.BytesIO,
     export_df: pd.DataFrame,
@@ -300,27 +307,37 @@ def write_excel_with_highlight(
     df_divisions: pd.DataFrame | None = None,
     df_groups: pd.DataFrame | None = None,
     df_classes: pd.DataFrame | None = None,
+    debug: bool = False,
 ):
     """
-    Пишет multi-sheet Excel:
-      - for_review: export_df
-      - + уровни (если переданы)
-    Подсвечивает ЦЕЛЫЕ СТОЛБЦЫ только для highlight_cols (SHAMS),
-    а колонки БД оставляет без заливки.
+    Подсвечивает колонки из highlight_cols (SHAMS), оставляя DB-колонки без заливки.
     """
 
-    fill = PatternFill(fill_type="solid", start_color="FFF2CC", end_color="FFF2CC")  # светло-жёлтый
+    # ВАЖНО: ARGB (8 символов). "FFFFF2CC" = светло-жёлтый с альфой FF.
+    fill = PatternFill(fill_type="solid", start_color="FFFFF2CC", end_color="FFFFF2CC")
 
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         export_df.to_excel(writer, index=False, sheet_name="for_review")
-
         ws = writer.sheets["for_review"]
 
-        # какие индексы колонок подсвечиваем (1-based, как в Excel)
-        col_to_idx = {name: i + 1 for i, name in enumerate(export_df.columns)}
-        highlight_idxs = [col_to_idx[c] for c in highlight_cols if c in col_to_idx]
+        # карта: нормализованное имя -> индекс Excel-колонки (1-based)
+        col_to_idx = {}
+        for i, name in enumerate(export_df.columns):
+            col_to_idx[_norm_col(name)] = i + 1
 
-        max_row = ws.max_row  # включает заголовок
+        highlight_idxs = []
+        for c in highlight_cols:
+            idx = col_to_idx.get(_norm_col(c))
+            if idx is not None:
+                highlight_idxs.append(idx)
+
+        if debug:
+            # если хочешь увидеть почему не красит — включи debug=True
+            print("EXPORT COLS:", list(export_df.columns))
+            print("HIGHLIGHT COLS:", highlight_cols)
+            print("HIGHLIGHT IDXS:", highlight_idxs)
+
+        max_row = ws.max_row  # включая заголовок
 
         for col_idx in highlight_idxs:
             for row_idx in range(1, max_row + 1):
@@ -585,8 +602,8 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         df_divisions=df_divisions,
         df_groups=df_groups,
         df_classes=df_classes,
+        debug=False,  # поставь True на 1 запуск, если снова не окрасит
     )
-
     buf.seek(0)
     xlsx_bytes = buf.getvalue()
 
