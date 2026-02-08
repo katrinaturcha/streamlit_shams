@@ -306,7 +306,6 @@ def _build_export_df(
     if "Subclass_code" not in db_df.columns:
         raise ValueError("В db_df нет Subclass_code")
 
-    # merge — подтягиваем значения БД
     merged = df_compare.merge(
         db_df,
         on="Subclass_code",
@@ -321,29 +320,31 @@ def _build_export_df(
         if col in merged.columns and col not in export_cols:
             export_cols.append(col)
 
-    # --- 1. всегда первым Subclass_code ---
+    # --- 0) status самым первым ---
+    add("status")
+
+    # --- 1) затем Subclass_code ---
     add("Subclass_code")
 
-    # --- 2. дальше строго по порядку UI ---
+    # --- 2) и сразу DB-пара для Subclass_code (если выбрана) ---
+    target_db_code = (db_map or {}).get("Subclass_code")
+    if target_db_code:
+        add(target_db_code)
+        used_db_cols.add(target_db_code)
+
+    # --- 3) дальше строго по порядку UI (попарно) ---
     for src_col in cols_order:
-        if src_col == "Subclass_code":
-            # для него добавляем ТОЛЬКО db-пару
-            target_db = db_map.get("Subclass_code")
-            if target_db:
-                add(target_db)
-                used_db_cols.add(target_db)
+        if src_col in ("Subclass_code", "status"):
             continue
 
-        # source-колонка
         add(src_col)
 
-        # её DB-пара
-        target_db = db_map.get(src_col)
+        target_db = (db_map or {}).get(src_col)
         if target_db:
             add(target_db)
             used_db_cols.add(target_db)
 
-    # --- 3. несопоставленные DB-колонки в конец (если нужны) ---
+    # --- 4) несопоставленные DB-колонки в конец (если нужны) ---
     for c in db_df.columns:
         if c == "Subclass_code":
             continue
@@ -351,7 +352,6 @@ def _build_export_df(
             add(c)
 
     return merged[export_cols]
-
 
 
 def _to_excel_bytes(df: pd.DataFrame, sheet_name: str = "export") -> bytes:
