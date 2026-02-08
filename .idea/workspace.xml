@@ -4,7 +4,7 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="columns_order">
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="status">
       <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
@@ -341,11 +341,18 @@
       <option name="project" value="LOCAL" />
       <updated>1770530294736</updated>
     </task>
-    <option name="localTasksCounter" value="34" />
+    <task id="LOCAL-00034" summary="status">
+      <option name="closed" value="true" />
+      <created>1770530781357</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1770530781357</updated>
+    </task>
+    <option name="localTasksCounter" value="35" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="alter compare" />
     <MESSAGE value="section, compare_shams" />
     <MESSAGE value="load files" />
     <MESSAGE value="compare shams subclass_en" />
@@ -370,6 +377,7 @@
     <MESSAGE value="col_clean_описание" />
     <MESSAGE value="shams_TO_BE_TRANSLATED" />
     <MESSAGE value="columns_order" />
-    <option name="LAST_COMMIT_MESSAGE" value="columns_order" />
+    <MESSAGE value="status" />
+    <option name="LAST_COMMIT_MESSAGE" value="status" />
   </component>
 </project>

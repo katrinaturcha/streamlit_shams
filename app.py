@@ -290,6 +290,52 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 # ============ STAGE 5 — DB MAPPING =================
 # ==================================================
+from openpyxl.styles import PatternFill
+
+def write_excel_with_highlight(
+    buf: io.BytesIO,
+    export_df: pd.DataFrame,
+    highlight_cols: list[str],
+    df_sections: pd.DataFrame | None = None,
+    df_divisions: pd.DataFrame | None = None,
+    df_groups: pd.DataFrame | None = None,
+    df_classes: pd.DataFrame | None = None,
+):
+    """
+    Пишет multi-sheet Excel:
+      - for_review: export_df
+      - + уровни (если переданы)
+    Подсвечивает ЦЕЛЫЕ СТОЛБЦЫ только для highlight_cols (SHAMS),
+    а колонки БД оставляет без заливки.
+    """
+
+    fill = PatternFill(fill_type="solid", start_color="FFF2CC", end_color="FFF2CC")  # светло-жёлтый
+
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="for_review")
+
+        ws = writer.sheets["for_review"]
+
+        # какие индексы колонок подсвечиваем (1-based, как в Excel)
+        col_to_idx = {name: i + 1 for i, name in enumerate(export_df.columns)}
+        highlight_idxs = [col_to_idx[c] for c in highlight_cols if c in col_to_idx]
+
+        max_row = ws.max_row  # включает заголовок
+
+        for col_idx in highlight_idxs:
+            for row_idx in range(1, max_row + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = fill
+
+        # дополнительные листы
+        if df_sections is not None:
+            df_sections.to_excel(writer, index=False, sheet_name="sections")
+        if df_divisions is not None:
+            df_divisions.to_excel(writer, index=False, sheet_name="divisions")
+        if df_groups is not None:
+            df_groups.to_excel(writer, index=False, sheet_name="groups")
+        if df_classes is not None:
+            df_classes.to_excel(writer, index=False, sheet_name="classes")
+
 
 def _build_export_df(
     df_compare: pd.DataFrame,
@@ -507,6 +553,7 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     # 2) Собираем экспортный df (рядом: столбец результата + столбец из БД)
     cols_order = st.session_state.get("db_cols_order") or []
 
+    # export_df уже построен попарно (SHAMS col + DB col)
     export_df = _build_export_df(
         df_compare=df_compare,
         db_df=db_df,
@@ -514,12 +561,10 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         cols_order=cols_order,
     )
 
-    # export_df = _build_export_df(df_compare, db_df, db_map, cols_order=cols_order, include_db_extra=False)
+    # Если Subclass не нужен в выгрузке — как ты сделала:
     export_df = export_df.drop(columns=["Subclass"], errors="ignore")
-    # export_df = _build_export_df(df_compare, db_df, db_map)
-    # export_df = export_df.drop(columns=["Subclass"], errors="ignore")
 
-    # 3) Парсим уровни (Section/Division/Group/Class) из нового файла (shams2)
+    # уровни из shams2
     try:
         _, df_sections, df_divisions, df_groups, df_classes, _ = parse_all_sheets_from_bytes(
             st.session_state.shams2_bytes, sheets=None
@@ -528,16 +573,19 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         st.error(f"Не удалось распарсить уровни из shams2: {e}")
         st.stop()
 
-    # 4) Пишем многолистный Excel
-    buf = io.BytesIO()
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="for_review")
+    # список колонок, которые подсвечиваем (только SHAMS)
+    highlight_cols = ["status", "Subclass_code"] + [c for c in cols_order if c != "Subclass_code"]
 
-        # уровни отдельными листами
-        df_sections.to_excel(writer, index=False, sheet_name="sections")
-        df_divisions.to_excel(writer, index=False, sheet_name="divisions")
-        df_groups.to_excel(writer, index=False, sheet_name="groups")
-        df_classes.to_excel(writer, index=False, sheet_name="classes")
+    buf = io.BytesIO()
+    write_excel_with_highlight(
+        buf=buf,
+        export_df=export_df,
+        highlight_cols=highlight_cols,
+        df_sections=df_sections,
+        df_divisions=df_divisions,
+        df_groups=df_groups,
+        df_classes=df_classes,
+    )
 
     buf.seek(0)
     xlsx_bytes = buf.getvalue()
