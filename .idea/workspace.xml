@@ -4,9 +4,9 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="col_clean_описание">
-      <change beforePath="$PROJECT_DIR$/header_log.py" beforeDir="false" afterPath="$PROJECT_DIR$/header_log.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/shams.xlsx" beforeDir="false" afterPath="$PROJECT_DIR$/shams.xlsx" afterDir="false" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="shams_TO_BE_TRANSLATED">
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/app.py" beforeDir="false" afterPath="$PROJECT_DIR$/app.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -57,6 +57,9 @@
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
       <recent name="C:\Users\e.turchaninova\PycharmProjects\streamlit_shams_ui" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
+      <recent name="$PROJECT_DIR$" />
     </key>
   </component>
   <component name="SharedIndexes">
@@ -323,7 +326,15 @@
       <option name="project" value="LOCAL" />
       <updated>1770488412645</updated>
     </task>
-    <option name="localTasksCounter" value="32" />
+    <task id="LOCAL-00032" summary="shams_TO_BE_TRANSLATED">
+      <option name="closed" value="true" />
+      <created>1770489976659</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1770489976659</updated>
+    </task>
+    <option name="localTasksCounter" value="33" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
@@ -351,6 +362,7 @@
     <MESSAGE value="delete_subclass" />
     <MESSAGE value="NEW_OLD" />
     <MESSAGE value="col_clean_описание" />
-    <option name="LAST_COMMIT_MESSAGE" value="col_clean_описание" />
+    <MESSAGE value="shams_TO_BE_TRANSLATED" />
+    <option name="LAST_COMMIT_MESSAGE" value="shams_TO_BE_TRANSLATED" />
   </component>
 </project>

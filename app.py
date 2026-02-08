@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import streamlit as st
 from pathlib import Path
 import pandas as pd
@@ -53,6 +55,7 @@ def init_state():
 
         "stage": STAGE_UPLOAD,
         "db_mapping_saved": False,
+        "db_cols_order": None,
 
     }
     for k, v in defaults.items():
@@ -288,22 +291,12 @@ if st.session_state.stage == STAGE_COMPARE:
 # ============ STAGE 5 — DB MAPPING =================
 # ==================================================
 
-def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict) -> pd.DataFrame:
-    """
-    Собирает DataFrame для выгрузки "for_review":
-
-    Вход:
-      - df_compare: результат compare_shams (обяз: Subclass_code, status, + колонки сравнения/логи)
-      - db_df: таблица "БД" (shams_edit1.xlsx) с реальными значениями (обяз: Subclass_code)
-      - db_map: { source_col_in_compare: db_col_name | None }
-
-    Выход:
-      - Subclass_code, Subclass, status (если есть)
-      - далее по порядку: source_col, рядом mapped db_col (значения берутся ИЗ db_df, не копируются)
-      - все db-колонки, которые ни с чем не сопоставили — добавляются в конец
-    """
-    if df_compare is None or df_compare.empty:
-        return df_compare
+def _build_export_df(
+    df_compare: pd.DataFrame,
+    db_df: pd.DataFrame,
+    db_map: dict,
+    cols_order: list[str],
+) -> pd.DataFrame:
 
     df_compare = df_compare.copy()
     db_df = db_df.copy()
@@ -313,73 +306,49 @@ def _build_export_df(df_compare: pd.DataFrame, db_df: pd.DataFrame, db_map: dict
     if "Subclass_code" not in db_df.columns:
         raise ValueError("В db_df нет Subclass_code")
 
-    # --- нормализуем имена колонок (на всякий случай) ---
-    df_compare.columns = [str(c).strip() for c in df_compare.columns]
-    db_df.columns = [str(c).strip() for c in db_df.columns]
-
-    # --- подмешаем Subclass из df_compare, если есть (по ТЗ его надо видеть) ---
-    # (если у тебя Subclass уже есть в df_compare — отлично, просто выведем его рядом)
-    # если Subclass хранится только в db_df — тоже выведем.
-    # Итог: в "front" попадёт то, что реально существует после merge.
+    # merge — подтягиваем значения БД
     merged = df_compare.merge(
         db_df,
         on="Subclass_code",
         how="left",
-        suffixes=("", "_dbdup"),  # защищаемся от дублей одинаковых имен
+        suffixes=("", "_db"),
     )
 
-    # если появились *_dbdup из-за совпадающих имён — оставляем приоритет за df_compare
-    # (а db-версию считаем "дополнительной" и будем выводить только если её явно выбрали)
-    # поэтому ничего не переименовываем автоматически.
+    export_cols: list[str] = []
+    used_db_cols: set[str] = set()
 
-    # --- front columns ---
-    front = []
-    for c in ["Subclass_code", "status"]:
-        if c in merged.columns and c not in front:
-            front.append(c)
+    def add(col: str):
+        if col in merged.columns and col not in export_cols:
+            export_cols.append(col)
 
-    # --- какие колонки из df_compare считаем "источником" для просмотра ---
-    compare_cols = [c for c in df_compare.columns if c not in ("Subclass_code", "status")]
+    # --- 1. всегда первым Subclass_code ---
+    add("Subclass_code")
 
-    export_cols = list(front)
-
-    # чтобы не добавлять одну и ту же db-колонку много раз
-    used_db_cols = set()
-
-    def _safe_add(colname: str):
-        if colname in merged.columns and colname not in export_cols:
-            export_cols.append(colname)
-
-    # 1) добавляем пары: source_col + mapped_db_col (значения db_col берём из merged -> из db_df)
-    for src_col in compare_cols:
-        _safe_add(src_col)
-
-        target_db = (db_map or {}).get(src_col)
-        if not target_db:
+    # --- 2. дальше строго по порядку UI ---
+    for src_col in cols_order:
+        if src_col == "Subclass_code":
+            # для него добавляем ТОЛЬКО db-пару
+            target_db = db_map.get("Subclass_code")
+            if target_db:
+                add(target_db)
+                used_db_cols.add(target_db)
             continue
 
-        target_db = str(target_db).strip()
+        # source-колонка
+        add(src_col)
 
-        if target_db in merged.columns:
-            _safe_add(target_db)
-            used_db_cols.add(target_db)
-        else:
-            # если пользователь выбрал DB_COLUMNS, но в db_df нет такого столбца
-            # добавим пустую колонку, чтобы структура была стабильной
-            merged[target_db] = pd.NA
-            _safe_add(target_db)
+        # её DB-пара
+        target_db = db_map.get(src_col)
+        if target_db:
+            add(target_db)
             used_db_cols.add(target_db)
 
-    # 2) добавляем "несопоставленные" колонки из БД в конец (со своими значениями)
-    db_extra = [c for c in db_df.columns if c not in ("Subclass_code",) and c not in used_db_cols]
-
-    # не добавляем то, что уже есть как source_col / front
-    for c in db_extra:
-        if c not in export_cols and c in merged.columns:
-            export_cols.append(c)
-
-    # финальная защита: только существующие
-    export_cols = [c for c in export_cols if c in merged.columns]
+    # --- 3. несопоставленные DB-колонки в конец (если нужны) ---
+    for c in db_df.columns:
+        if c == "Subclass_code":
+            continue
+        if c not in used_db_cols:
+            add(c)
 
     return merged[export_cols]
 
@@ -474,6 +443,7 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     # убрать дубли, сохранить порядок
     cols_to_map = list(dict.fromkeys(cols_to_map))
 
+    st.session_state.db_cols_order = cols_to_map
     # --- init/normalize mapping только по этим колонкам ---
     current_map = st.session_state.db_column_mapping or {}
     current_map = {k: v for k, v in current_map.items() if k in cols_to_map}
@@ -535,8 +505,19 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         st.stop()
 
     # 2) Собираем экспортный df (рядом: столбец результата + столбец из БД)
-    export_df = _build_export_df(df_compare, db_df, db_map)
+    cols_order = st.session_state.get("db_cols_order") or []
+
+    export_df = _build_export_df(
+        df_compare=df_compare,
+        db_df=db_df,
+        db_map=db_map,
+        cols_order=cols_order,
+    )
+
+    # export_df = _build_export_df(df_compare, db_df, db_map, cols_order=cols_order, include_db_extra=False)
     export_df = export_df.drop(columns=["Subclass"], errors="ignore")
+    # export_df = _build_export_df(df_compare, db_df, db_map)
+    # export_df = export_df.drop(columns=["Subclass"], errors="ignore")
 
     # 3) Парсим уровни (Section/Division/Group/Class) из нового файла (shams2)
     try:
