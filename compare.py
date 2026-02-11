@@ -4,6 +4,41 @@ import pandas as pd
 
 from utils import normalize_text_for_compare, normalize_subclass_simple
 
+def compare_level_descriptions(df_old: pd.DataFrame, df_new: pd.DataFrame, key_col: str, desc_col: str) -> pd.DataFrame:
+    """
+    Универсальное сравнение справочника уровней (groups/classes/subclasses):
+    возвращает: key_col, status, Description (лог OLD/NEW)
+    """
+    df_old = df_old.copy()
+    df_new = df_new.copy()
+
+    df_old.columns = [str(c).strip() for c in df_old.columns]
+    df_new.columns = [str(c).strip() for c in df_new.columns]
+
+    if key_col not in df_old.columns or key_col not in df_new.columns:
+        raise ValueError(f"Нет ключа {key_col} в одном из датафреймов")
+    if desc_col not in df_old.columns or desc_col not in df_new.columns:
+        raise ValueError(f"Нет описания {desc_col} в одном из датафреймов")
+
+    o = df_old[[key_col, desc_col]].rename(columns={desc_col: "desc_old"})
+    n = df_new[[key_col, desc_col]].rename(columns={desc_col: "desc_new"})
+
+    m = o.merge(n, on=key_col, how="outer", indicator=True)
+
+    def _status(r):
+        if r["_merge"] == "left_only":
+            return "deleted"
+        if r["_merge"] == "right_only":
+            return "added"
+        old_v = normalize_text_for_compare(r.get("desc_old", ""))
+        new_v = normalize_text_for_compare(r.get("desc_new", ""))
+        return "changed" if old_v != new_v else "not changed"
+
+    m["status"] = m.apply(_status, axis=1)
+    m["Description"] = m.apply(lambda r: _fmt_log(r["status"], r.get("desc_old",""), r.get("desc_new","")), axis=1)
+
+    return m[[key_col, "status", "Description"]]
+
 
 def _to_scalar(x):
     if isinstance(x, pd.Series):
