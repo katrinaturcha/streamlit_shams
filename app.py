@@ -40,6 +40,41 @@ if not SHAMS_PATH.exists():
     st.error("Файл shams.xlsx не найден")
     st.stop()
 
+import inspect
+
+def call_compare_level_descriptions(fn, df_old, df_new, key_col, desc_col):
+    """
+    Универсальный вызов compare_level_descriptions с поддержкой разных сигнатур.
+    Пытается:
+      1) (df_old, df_new, key_col, desc_col)
+      2) (df_old, df_new, key_col=..., desc_col=...)
+      3) (df_old, df_new)  -> если функция сама знает, что сравнивать
+    """
+    sig = inspect.signature(fn)
+    params = list(sig.parameters.keys())
+
+    # если функция принимает 4 аргумента (кроме self) — пробуем передать 4
+    if len(params) >= 4:
+        try:
+            return fn(df_old, df_new, key_col, desc_col)
+        except TypeError:
+            # пробуем именованные
+            return fn(df_old, df_new, key_col=key_col, desc_col=desc_col)
+
+    # если функция принимает 2 аргумента — вызываем только с df_old/df_new
+    if len(params) == 2:
+        return fn(df_old, df_new)
+
+    # если 3 аргумента — возможно это (df_old, df_new, level_name) или (df_old, df_new, key_col)
+    # пробуем по смыслу: сначала key_col, если не выйдет — desc_col
+    if len(params) == 3:
+        try:
+            return fn(df_old, df_new, key_col)
+        except TypeError:
+            return fn(df_old, df_new, desc_col)
+
+    # иначе — пусть падает с понятной ошибкой
+    raise TypeError(f"Неожиданная сигнатура compare_level_descriptions: {sig}")
 
 # ================== SESSION STATE ==================
 def init_state():
@@ -609,16 +644,17 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     # ВАЖНО: названия колонок ключа/описания должны совпадать с твоими листами.
     # Судя по твоему Excel: classes: Class, Class_en; groups: Group, Group_en; subclasses: Subclass, Subclass_en
     # --- сравнения описаний уровней (как Subclass) ---
-    try:
-        # вариант 1: функция принимает (df_old, df_new, key_col, desc_col)
-        df_groups_cmp = compare_level_descriptions(grp_old, grp_new, "Group", "Group_en")
-        df_classes_cmp = compare_level_descriptions(cls_old, cls_new, "Class", "Class_en")
-        df_subclasses_cmp = compare_level_descriptions(sub_old, sub_new, "Subclass", "Subclass_en")
-    except TypeError:
-        # вариант 2: функция принимает (df_old, df_new, level_name) и внутри сама знает ключ/описание
-        df_groups_cmp = compare_level_descriptions(grp_old, grp_new, "Group")
-        df_classes_cmp = compare_level_descriptions(cls_old, cls_new, "Class")
-        df_subclasses_cmp = compare_level_descriptions(sub_old, sub_new, "Subclass")
+    df_groups_cmp = call_compare_level_descriptions(
+        compare_level_descriptions, grp_old, grp_new, key_col="Group", desc_col="Group_en"
+    )
+
+    df_classes_cmp = call_compare_level_descriptions(
+        compare_level_descriptions, cls_old, cls_new, key_col="Class", desc_col="Class_en"
+    )
+
+    df_subclasses_cmp = call_compare_level_descriptions(
+        compare_level_descriptions, sub_old, sub_new, key_col="Subclass", desc_col="Subclass_en"
+    )
 
     # 4) подсветка: только SHAMS-колонки
     highlight_cols = ["status", "Subclass_code"] + [c for c in cols_order if c != "Subclass_code"]
