@@ -608,9 +608,17 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     # сравнения описаний уровней (как Subclass)
     # ВАЖНО: названия колонок ключа/описания должны совпадать с твоими листами.
     # Судя по твоему Excel: classes: Class, Class_en; groups: Group, Group_en; subclasses: Subclass, Subclass_en
-    df_groups_cmp = compare_level_descriptions(grp_old, grp_new, key_col="Group", desc_col="Group_en")
-    df_classes_cmp = compare_level_descriptions(cls_old, cls_new, key_col="Class", desc_col="Class_en")
-    df_subclasses_cmp = compare_level_descriptions(sub_old, sub_new, key_col="Subclass", desc_col="Subclass_en")
+    # --- сравнения описаний уровней (как Subclass) ---
+    try:
+        # вариант 1: функция принимает (df_old, df_new, key_col, desc_col)
+        df_groups_cmp = compare_level_descriptions(grp_old, grp_new, "Group", "Group_en")
+        df_classes_cmp = compare_level_descriptions(cls_old, cls_new, "Class", "Class_en")
+        df_subclasses_cmp = compare_level_descriptions(sub_old, sub_new, "Subclass", "Subclass_en")
+    except TypeError:
+        # вариант 2: функция принимает (df_old, df_new, level_name) и внутри сама знает ключ/описание
+        df_groups_cmp = compare_level_descriptions(grp_old, grp_new, "Group")
+        df_classes_cmp = compare_level_descriptions(cls_old, cls_new, "Class")
+        df_subclasses_cmp = compare_level_descriptions(sub_old, sub_new, "Subclass")
 
     # 4) подсветка: только SHAMS-колонки
     highlight_cols = ["status", "Subclass_code"] + [c for c in cols_order if c != "Subclass_code"]
