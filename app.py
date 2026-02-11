@@ -1,25 +1,26 @@
-# app.py
 from __future__ import annotations
 
 import io
 import re
 from pathlib import Path
+from typing import Dict, List, Optional
 
 import pandas as pd
 import streamlit as st
 from openpyxl.styles import PatternFill
 
-from DB import DB_COLUMNS
-from compare import compare_shams, comparison_stats, compare_level_descriptions
 from header_log import build_header_change_log_from_bytes
 from shams_parser import parse_all_sheets_from_bytes
+from compare import compare_shams, comparison_stats
+from utils import normalize_text_for_compare
+from DB import DB_COLUMNS
 
 
 # ================== STAGES ==================
 STAGE_UPLOAD = "upload"
 STAGE_SELECT_HEADERS = "select_headers"
 STAGE_MAPPING = "mapping"
-STAGE_HIERARCHY = "hierarchy"         # <-- новый шаг
+STAGE_HIERARCHY = "hierarchy"
 STAGE_COMPARE = "compare"
 STAGE_DB_MAPPING = "db_mapping"
 STAGE_DB_EXPORT = "db_export"
@@ -40,41 +41,6 @@ if not SHAMS_PATH.exists():
     st.error("Файл shams.xlsx не найден")
     st.stop()
 
-import inspect
-
-def call_compare_level_descriptions(fn, df_old, df_new, key_col, desc_col):
-    """
-    Универсальный вызов compare_level_descriptions с поддержкой разных сигнатур.
-    Пытается:
-      1) (df_old, df_new, key_col, desc_col)
-      2) (df_old, df_new, key_col=..., desc_col=...)
-      3) (df_old, df_new)  -> если функция сама знает, что сравнивать
-    """
-    sig = inspect.signature(fn)
-    params = list(sig.parameters.keys())
-
-    # если функция принимает 4 аргумента (кроме self) — пробуем передать 4
-    if len(params) >= 4:
-        try:
-            return fn(df_old, df_new, key_col, desc_col)
-        except TypeError:
-            # пробуем именованные
-            return fn(df_old, df_new, key_col=key_col, desc_col=desc_col)
-
-    # если функция принимает 2 аргумента — вызываем только с df_old/df_new
-    if len(params) == 2:
-        return fn(df_old, df_new)
-
-    # если 3 аргумента — возможно это (df_old, df_new, level_name) или (df_old, df_new, key_col)
-    # пробуем по смыслу: сначала key_col, если не выйдет — desc_col
-    if len(params) == 3:
-        try:
-            return fn(df_old, df_new, key_col)
-        except TypeError:
-            return fn(df_old, df_new, desc_col)
-
-    # иначе — пусть падает с понятной ошибкой
-    raise TypeError(f"Неожиданная сигнатура compare_level_descriptions: {sig}")
 
 # ================== SESSION STATE ==================
 def init_state():
@@ -91,18 +57,23 @@ def init_state():
         # mapping shams2 -> shams
         "column_mapping": None,
 
-        # hierarchy stage
-        "hier_levels": 1,                 # 1/2/3
-        "hier_col_role": None,            # {col: "L1"/"L2"/"L3"/"COMMON"/"SKIP"}
+        # hierarchy step
+        "hier_levels": 1,  # 1/2/3
+        "hier_col_roles": None,  # {col: "L1"/"L2"/"L3"/"SKIP"/"COMMON"}
 
         # compare
         "df_compare": None,
         "compare_stats": None,
 
         # db mapping
-        "db_column_mapping": None,
+        "db_column_mapping": None,  # {src_col: db_col}
         "db_mapping_saved": False,
-        "db_cols_order": None,
+        "db_cols_order": None,  # list of src cols in UI order (for export pairing)
+
+        # sheets comparisons
+        "df_groups_cmp": None,
+        "df_classes_cmp": None,
+        "df_subclasses_cmp": None,
 
         # stage
         "stage": STAGE_UPLOAD,
@@ -160,50 +131,83 @@ def _norm_col(x: str) -> str:
     return s.strip().lower()
 
 
-def write_excel_with_highlight(
-    buf: io.BytesIO,
-    export_df: pd.DataFrame,
-    highlight_cols: list[str],
-    df_sections: pd.DataFrame | None = None,
-    df_divisions: pd.DataFrame | None = None,
-    df_groups: pd.DataFrame | None = None,
-    df_classes: pd.DataFrame | None = None,
-    df_subclasses: pd.DataFrame | None = None,
-):
+def compare_level_like_subclass(
+    df_old: pd.DataFrame,
+    df_new: pd.DataFrame,
+    key_col: str,
+    desc_col: str,
+    out_key_name: Optional[str] = None,
+    out_desc_name: str = "Description",
+) -> pd.DataFrame:
     """
-    Подсвечивает колонки из highlight_cols (SHAMS), оставляя DB-колонки без заливки.
+    Сравнение уровня (Group/Class/Subclass) по ключу и описанию:
+    выход: status, <key>, Description (в виде OLD/NEW как в Subclass)
     """
-    fill = PatternFill(fill_type="solid", start_color="FFFFF2CC", end_color="FFFFF2CC")
+    out_key_name = out_key_name or key_col
 
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="for_review")
-        ws = writer.sheets["for_review"]
+    if df_old is None or df_old.empty:
+        df_old = pd.DataFrame(columns=[key_col, desc_col])
+    if df_new is None or df_new.empty:
+        df_new = pd.DataFrame(columns=[key_col, desc_col])
 
-        col_to_idx = {}
-        for i, name in enumerate(export_df.columns):
-            col_to_idx[_norm_col(name)] = i + 1
+    df_old = df_old.copy()
+    df_new = df_new.copy()
 
-        highlight_idxs = []
-        for c in highlight_cols:
-            idx = col_to_idx.get(_norm_col(c))
-            if idx is not None:
-                highlight_idxs.append(idx)
+    df_old.columns = [str(c).strip() for c in df_old.columns]
+    df_new.columns = [str(c).strip() for c in df_new.columns]
 
-        max_row = ws.max_row
-        for col_idx in highlight_idxs:
-            for row_idx in range(1, max_row + 1):
-                ws.cell(row=row_idx, column=col_idx).fill = fill
+    if key_col not in df_old.columns and key_col not in df_new.columns:
+        return pd.DataFrame(columns=["status", out_key_name, out_desc_name])
 
-        if df_sections is not None:
-            df_sections.to_excel(writer, index=False, sheet_name="sections")
-        if df_divisions is not None:
-            df_divisions.to_excel(writer, index=False, sheet_name="divisions")
-        if df_groups is not None:
-            df_groups.to_excel(writer, index=False, sheet_name="groups")
-        if df_classes is not None:
-            df_classes.to_excel(writer, index=False, sheet_name="classes")
-        if df_subclasses is not None:
-            df_subclasses.to_excel(writer, index=False, sheet_name="subclasses")
+    need_old = [c for c in [key_col, desc_col] if c in df_old.columns]
+    need_new = [c for c in [key_col, desc_col] if c in df_new.columns]
+    df_old = df_old[need_old].copy()
+    df_new = df_new[need_new].copy()
+
+    df_old = df_old.add_suffix("_old").rename(columns={f"{key_col}_old": key_col})
+    df_new = df_new.add_suffix("_new").rename(columns={f"{key_col}_new": key_col})
+
+    merged = pd.merge(df_old, df_new, on=key_col, how="outer", indicator=True)
+
+    def _initial_status(m):
+        if m == "left_only":
+            return "deleted"
+        if m == "right_only":
+            return "added"
+        return "potentially_changed"
+
+    merged["status"] = merged["_merge"].apply(_initial_status)
+
+    old_desc = f"{desc_col}_old"
+    new_desc = f"{desc_col}_new"
+
+    def _final_status(row):
+        stt = row["status"]
+        if stt in ("added", "deleted"):
+            return stt
+        old_v = normalize_text_for_compare(row.get(old_desc, ""))
+        new_v = normalize_text_for_compare(row.get(new_desc, ""))
+        return "changed" if old_v != new_v else "not changed"
+
+    merged["status"] = merged.apply(_final_status, axis=1)
+
+    def _fmt(row):
+        stt = row["status"]
+        o = "" if pd.isna(row.get(old_desc)) else str(row.get(old_desc)).strip()
+        n = "" if pd.isna(row.get(new_desc)) else str(row.get(new_desc)).strip()
+        if stt == "changed":
+            return f"OLD: {o}\nNEW: {n}".strip()
+        if stt == "deleted":
+            return f"OLD: {o}".strip() if o else ""
+        if stt == "added":
+            return f"NEW: {n}".strip() if n else ""
+        return ""
+
+    merged[out_desc_name] = merged.apply(_fmt, axis=1)
+
+    out = merged[[key_col, "status", out_desc_name]].rename(columns={key_col: out_key_name})
+    out = out[["status", out_key_name, out_desc_name]]
+    return out
 
 
 def _build_export_df(
@@ -213,9 +217,9 @@ def _build_export_df(
     cols_order: list[str],
 ) -> pd.DataFrame:
     """
-    Экспорт строго попарно по порядку UI:
-    status, Subclass_code, (db for Subclass_code), затем:
-      src_col, (db_col), src_col, (db_col) ...
+    Делает for_review попарно:
+    status, Subclass_code, <db for Subclass_code>, Description, <db for Description>, ...
+    затем несопоставленные db-колонки в конец.
     """
     df_compare = df_compare.copy()
     db_df = db_df.copy()
@@ -240,13 +244,13 @@ def _build_export_df(
     # 1) Subclass_code
     add("Subclass_code")
 
-    # 2) db-пара для Subclass_code
+    # 2) пара для Subclass_code (если выбрана)
     target_db_code = (db_map or {}).get("Subclass_code")
     if target_db_code:
         add(target_db_code)
         used_db_cols.add(target_db_code)
 
-    # 3) далее по порядку UI
+    # 3) остальное по порядку UI (попарно)
     for src_col in cols_order:
         if src_col in ("Subclass_code", "status"):
             continue
@@ -258,7 +262,7 @@ def _build_export_df(
             add(target_db)
             used_db_cols.add(target_db)
 
-    # 4) остальные db колонки в конец (если нужны)
+    # 4) оставшиеся DB-колонки в конец (если нужны)
     for c in db_df.columns:
         if c == "Subclass_code":
             continue
@@ -268,13 +272,64 @@ def _build_export_df(
     return merged[export_cols]
 
 
+def write_excel_with_highlight(
+    buf: io.BytesIO,
+    export_df: pd.DataFrame,
+    highlight_cols: list[str],
+    df_sections: pd.DataFrame | None = None,
+    df_divisions: pd.DataFrame | None = None,
+    df_groups_cmp: pd.DataFrame | None = None,
+    df_classes_cmp: pd.DataFrame | None = None,
+    df_subclasses_cmp: pd.DataFrame | None = None,
+    debug: bool = False,
+):
+    """Подсвечивает только SHAMS-колонки (highlight_cols) на листе for_review."""
+    fill = PatternFill(fill_type="solid", start_color="FFFFF2CC", end_color="FFFFF2CC")
+
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="for_review")
+        ws = writer.sheets["for_review"]
+
+        col_to_idx = { _norm_col(name): i + 1 for i, name in enumerate(export_df.columns) }
+
+        highlight_idxs = []
+        for c in highlight_cols:
+            idx = col_to_idx.get(_norm_col(c))
+            if idx is not None:
+                highlight_idxs.append(idx)
+
+        if debug:
+            print("EXPORT COLS:", list(export_df.columns))
+            print("HIGHLIGHT COLS:", highlight_cols)
+            print("HIGHLIGHT IDXS:", highlight_idxs)
+
+        max_row = ws.max_row
+        for col_idx in highlight_idxs:
+            for row_idx in range(1, max_row + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = fill
+
+        # Дополнительные листы
+        if df_sections is not None:
+            df_sections.to_excel(writer, index=False, sheet_name="sections")
+        if df_divisions is not None:
+            df_divisions.to_excel(writer, index=False, sheet_name="divisions")
+
+        # ВАЖНО: эти листы — именно сравнение
+        if df_groups_cmp is not None:
+            df_groups_cmp.to_excel(writer, index=False, sheet_name="groups")
+        if df_classes_cmp is not None:
+            df_classes_cmp.to_excel(writer, index=False, sheet_name="classes")
+        if df_subclasses_cmp is not None:
+            df_subclasses_cmp.to_excel(writer, index=False, sheet_name="subclasses")
+
+
 # ================== UI ==================
 st.title("Список активити провайдера")
 st.markdown("---")
 
 
 # ==================================================
-# =============== STAGE 1 — UPLOAD ==================
+# =============== STAGE 1 — UPLOAD =================
 # ==================================================
 if st.session_state.stage == STAGE_UPLOAD:
     st.subheader("Укажите новый источник")
@@ -283,13 +338,12 @@ if st.session_state.stage == STAGE_UPLOAD:
     if uploaded is not None:
         st.session_state.shams2_bytes = uploaded.read()
 
-    col1, col2 = st.columns(2)
-
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Отменить"):
             st.session_state.shams2_bytes = None
 
-    with col2:
+    with c2:
         if st.button("Применить", disabled=st.session_state.shams2_bytes is None):
             load_shams()
 
@@ -302,6 +356,18 @@ if st.session_state.stage == STAGE_UPLOAD:
             st.session_state.headers_old = h_old
             st.session_state.headers_new = h_new
             st.session_state.headers_new_selected = list(h_new)
+
+            # сбросы
+            st.session_state.column_mapping = None
+            st.session_state.hier_col_roles = None
+            st.session_state.df_compare = None
+            st.session_state.compare_stats = None
+            st.session_state.db_column_mapping = None
+            st.session_state.db_mapping_saved = False
+            st.session_state.db_cols_order = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
 
             st.session_state.stage = STAGE_SELECT_HEADERS
             st.rerun()
@@ -316,8 +382,8 @@ if st.session_state.stage == STAGE_SELECT_HEADERS:
 
     headers = st.session_state.headers_new or []
     prev_selected = st.session_state.headers_new_selected or []
-    temp_selected: list[str] = []
 
+    temp_selected = []
     for col in headers:
         checked = st.checkbox(col, value=(col in prev_selected), key=f"chk_{col}")
         if checked:
@@ -326,21 +392,24 @@ if st.session_state.stage == STAGE_SELECT_HEADERS:
     st.session_state.headers_new_selected = temp_selected
 
     st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Назад"):
             st.session_state.stage = STAGE_UPLOAD
             st.rerun()
-
-    with col2:
+    with c2:
         if st.button("Перейти к сопоставлению", disabled=len(temp_selected) == 0):
             st.session_state.column_mapping = None
+            st.session_state.hier_col_roles = None
             st.session_state.df_compare = None
             st.session_state.compare_stats = None
             st.session_state.db_column_mapping = None
             st.session_state.db_mapping_saved = False
-            st.session_state.hier_col_role = None
+            st.session_state.db_cols_order = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
+
             st.session_state.stage = STAGE_MAPPING
             st.rerun()
 
@@ -373,34 +442,36 @@ if st.session_state.stage == STAGE_MAPPING:
         st.markdown(f"**{col_new} →**")
         options = ["<нет соответствия>"] + headers_old
         current_value = mapping.get(col_new)
-        index = (headers_old.index(current_value) + 1) if current_value in headers_old else 0
 
+        index = (headers_old.index(current_value) + 1) if (current_value in headers_old) else 0
         selected = st.selectbox(
             f"Соответствие для {col_new}",
             options=options,
             index=index,
             key=f"map_{col_new}",
         )
-
         mapping[col_new] = None if selected == "<нет соответствия>" else selected
 
     st.session_state.column_mapping = mapping
 
     st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Назад"):
             st.session_state.stage = STAGE_SELECT_HEADERS
             st.rerun()
-
-    with col2:
-        if st.button("Подтвердить сопоставление"):
-            # далее идём на шаг иерархии
+    with c2:
+        if st.button("Далее: уровни иерархии"):
+            st.session_state.hier_col_roles = None
             st.session_state.df_compare = None
             st.session_state.compare_stats = None
             st.session_state.db_column_mapping = None
             st.session_state.db_mapping_saved = False
+            st.session_state.db_cols_order = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
+
             st.session_state.stage = STAGE_HIERARCHY
             st.rerun()
 
@@ -410,76 +481,78 @@ if st.session_state.stage == STAGE_MAPPING:
 # ==================================================
 if st.session_state.stage == STAGE_HIERARCHY:
     st.subheader("Шаг 3 — уровни иерархии")
-    st.caption("Выберите количество уровней и укажите, к какому уровню относится каждый столбец shams2.")
+    st.caption("Укажите количество уровней и определите, к какому уровню относится каждый столбец shams2.")
 
-    headers_new_selected = st.session_state.headers_new_selected or []
-
-    st.markdown("**Сколько уровней иерархии сравнивать?**")
     levels = st.radio(
-        label="",
+        "Сколько уровней иерархии?",
         options=[1, 2, 3],
         index=[1, 2, 3].index(st.session_state.get("hier_levels", 1)),
         horizontal=True,
     )
     st.session_state.hier_levels = levels
 
-    roles = ["не включать в сопоставление", "это общий столбец"]
-    if levels >= 1:
-        roles.append("1 уровень")
-    if levels >= 2:
-        roles.append("2 уровень")
-    if levels >= 3:
-        roles.append("3 уровень")
-
-    role_map = {
-        "не включать в сопоставление": "SKIP",
-        "это общий столбец": "COMMON",
-        "1 уровень": "L1",
-        "2 уровень": "L2",
-        "3 уровень": "L3",
-    }
-
-    if st.session_state.hier_col_role is None:
-        st.session_state.hier_col_role = {c: "SKIP" for c in headers_new_selected}
-        # разумный дефолт: Description -> COMMON
-        for c in headers_new_selected:
-            if str(c).strip().lower() == "description":
-                st.session_state.hier_col_role[c] = "COMMON"
-
-    # синхронизация если список изменился
-    cur = {k: v for k, v in (st.session_state.hier_col_role or {}).items() if k in headers_new_selected}
-    for c in headers_new_selected:
-        cur.setdefault(c, "SKIP")
-    st.session_state.hier_col_role = cur
-
-    st.markdown("---")
-    for col in headers_new_selected:
-        current_role_code = st.session_state.hier_col_role.get(col, "SKIP")
-        # обратная карта для UI
-        inv = {v: k for k, v in role_map.items()}
-        current_label = inv.get(current_role_code, "не включать в сопоставление")
-        idx = roles.index(current_label) if current_label in roles else 0
-
-        selected = st.selectbox(
-            label=col,
-            options=roles,
-            index=idx,
-            key=f"hier_{col}",
-        )
-        st.session_state.hier_col_role[col] = role_map[selected]
-
-    st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
+    # Кандидаты: выбранные колонки нового файла
+    cols = st.session_state.headers_new_selected or []
+    if not cols:
+        st.warning("Нет выбранных колонок. Вернитесь назад.")
         if st.button("Назад"):
             st.session_state.stage = STAGE_MAPPING
             st.rerun()
+        st.stop()
 
-    with col2:
+    # init roles
+    if st.session_state.hier_col_roles is None:
+        st.session_state.hier_col_roles = {c: "COMMON" for c in cols}
+        # типовые авто-эвристики
+        for c in cols:
+            cl = _norm_col(c)
+            if cl == "subclass":
+                st.session_state.hier_col_roles[c] = "L1"
+            elif cl == "class":
+                st.session_state.hier_col_roles[c] = "L2"
+            elif cl == "group":
+                st.session_state.hier_col_roles[c] = "L3"
+            elif "description" in cl or cl in ("subclass_en", "description", "desc"):
+                st.session_state.hier_col_roles[c] = "COMMON"
+
+    role_map = st.session_state.hier_col_roles
+
+    options = ["L1", "L2", "L3", "COMMON", "SKIP"]
+    labels = {
+        "L1": "1 уровень",
+        "L2": "2 уровень",
+        "L3": "3 уровень",
+        "COMMON": "это общий столбец",
+        "SKIP": "не включать в сопоставление",
+    }
+
+    # Один столбец UI
+    for c in cols:
+        cur = role_map.get(c, "COMMON")
+        sel = st.selectbox(
+            label=c,
+            options=options,
+            index=options.index(cur) if cur in options else options.index("COMMON"),
+            format_func=lambda x: labels.get(x, x),
+            key=f"hier_{c}",
+        )
+        role_map[c] = sel
+
+    st.session_state.hier_col_roles = role_map
+
+    st.markdown("---")
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Назад"):
+            st.session_state.stage = STAGE_MAPPING
+            st.rerun()
+    with c2:
         if st.button("Сохранить и перейти к статистике", type="primary"):
             st.session_state.df_compare = None
             st.session_state.compare_stats = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
@@ -491,37 +564,54 @@ if st.session_state.stage == STAGE_COMPARE:
     st.subheader("Статистика сравнения")
 
     if st.session_state.df_compare is None:
-        df_full_old, *_ = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
-        df_full_new, *_ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
+        df_full_old, sec_old, div_old, grp_old, cls_old, sub_old = parse_all_sheets_from_bytes(
+            st.session_state.shams_bytes, sheets=None
+        )
+        df_full_new, sec_new, div_new, grp_new, cls_new, sub_new = parse_all_sheets_from_bytes(
+            st.session_state.shams2_bytes, sheets=None
+        )
 
-        # сравнение как раньше (Subclass_en -> Description + выбранные)
-        df_compare = compare_shams(df_full_old, df_full_new, st.session_state.column_mapping)
-
+        # Основное сравнение активити (как раньше)
+        df_compare = compare_shams(
+            df_full_old,
+            df_full_new,
+            st.session_state.column_mapping,
+        )
         st.session_state.df_compare = df_compare
         st.session_state.compare_stats = comparison_stats(df_compare)
+
+        # Доп. листы сравнения уровней: groups/classes/subclasses (как Subclass)
+        # Если у тебя на уровнях другие колонки — поменяй desc_col здесь.
+        st.session_state.df_groups_cmp = compare_level_like_subclass(
+            grp_old, grp_new, key_col="Group", desc_col="Group_en", out_key_name="Group"
+        )
+        st.session_state.df_classes_cmp = compare_level_like_subclass(
+            cls_old, cls_new, key_col="Class", desc_col="Class_en", out_key_name="Class"
+        )
+        st.session_state.df_subclasses_cmp = compare_level_like_subclass(
+            sub_old, sub_new, key_col="Subclass", desc_col="Subclass_en", out_key_name="Subclass"
+        )
 
     stats_df = st.session_state.compare_stats
     stats = dict(zip(stats_df["metric"], stats_df["value"]))
 
     st.markdown(
         f"""
-**Количество активити в старом файле:** {stats['Количество строк в старом файле']}  
-**Количество активити в новом файле:** {stats['Количество строк в новом файле']}  
-**Добавлено активити:** {stats['Добавлено']}  
-**Удалено активити:** {stats['Удалено']}  
-**Внесены изменения:** {stats['Изменено (по выбранным столбцам)']}  
-**Остались без изменений:** {stats['Не изменено']}  
+**Количество активити в старом файле:** {stats.get('Количество строк в старом файле', '')}  
+**Количество активити в новом файле:** {stats.get('Количество строк в новом файле', '')}  
+**Добавлено активити:** {stats.get('Добавлено', '')}  
+**Удалено активити:** {stats.get('Удалено', '')}  
+**Внесены изменения:** {stats.get('Изменено (по выбранным столбцам)', '')}  
+**Остались без изменений:** {stats.get('Не изменено', '')}  
 """
     )
 
-    col1, col2 = st.columns(2)
-
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Назад"):
             st.session_state.stage = STAGE_HIERARCHY
             st.rerun()
-
-    with col2:
+    with c2:
         if st.button("Выгрузить в эксель для работы с обновлениями", type="primary"):
             st.session_state.stage = STAGE_DB_MAPPING
             st.rerun()
@@ -532,38 +622,37 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 if st.session_state.stage == STAGE_DB_MAPPING:
     st.subheader("Сопоставление столбцов результата и Базы Данных")
-    st.caption("Если выбрать «<нет соответствия>», колонка всё равно пойдёт в итоговый файл и сохранит текущее имя.")
+    st.caption("Status не сопоставляется. Subclass_code сопоставляется отдельно и будет во второй позиции после status в выгрузке.")
 
     df = st.session_state.df_compare
     if df is None or df.empty:
         st.error("Нет результата сравнения. Вернитесь на шаг сравнения.")
         st.stop()
 
-    # страховка от старой логики
+    # если вдруг старый формат compare
     legacy_cols = [c for c in df.columns if c.endswith("_old") or c.endswith("_new") or c == "diff_columns"]
     if legacy_cols:
-        st.warning("Похоже, df_compare посчитан старой логикой. Пересчитываю...")
-        st.session_state.df_compare = None
-        st.session_state.compare_stats = None
-        st.session_state.stage = STAGE_COMPARE
-        st.rerun()
+        st.warning("Найдены признаки старого df_compare (*_old/_new/diff_columns). Пересчитайте сравнение.")
+        st.stop()
 
     cols_to_map: list[str] = []
 
-    # обязательно Subclass_code (status НЕ маппим)
+    # 1) Subclass_code обязателен
     if "Subclass_code" in df.columns:
         cols_to_map.append("Subclass_code")
 
+    # 2) всё остальное (кроме служебных)
     other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
-
     if "Description" in other:
         other = ["Description"] + [c for c in other if c != "Description"]
 
     cols_to_map += other
     cols_to_map = list(dict.fromkeys(cols_to_map))
 
+    # запоминаем порядок UI — он нужен для попарного экспорта
     st.session_state.db_cols_order = cols_to_map
 
+    # init mapping
     current_map = st.session_state.db_column_mapping or {}
     current_map = {k: v for k, v in current_map.items() if k in cols_to_map}
     for c in cols_to_map:
@@ -572,6 +661,7 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     st.session_state.db_column_mapping = current_map
     mapping = st.session_state.db_column_mapping
 
+    # один столбец UI
     for col in cols_to_map:
         cur_val = mapping.get(col)
         selected = st.selectbox(
@@ -585,14 +675,12 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     st.session_state.db_column_mapping = mapping
 
     st.markdown("---")
-    col1, col2 = st.columns(2)
-
-    with col1:
+    c1, c2 = st.columns(2)
+    with c1:
         if st.button("Назад"):
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
-
-    with col2:
+    with c2:
         if st.button("Сохранить сопоставление", type="primary"):
             st.session_state.db_mapping_saved = True
             st.session_state.stage = STAGE_DB_EXPORT
@@ -617,58 +705,47 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     db_map = st.session_state.db_column_mapping or {}
     cols_order = st.session_state.get("db_cols_order") or []
 
-    # 1) БД
+    # DB
     db_df = load_db_df()
     if db_df is None or db_df.empty:
         st.error("Файл БД пустой или не загрузился.")
         st.stop()
 
-    # 2) for_review попарно
+    # for_review (попарно)
     export_df = _build_export_df(
         df_compare=df_compare,
         db_df=db_df,
         db_map=db_map,
         cols_order=cols_order,
     )
-    export_df = export_df.drop(columns=["Subclass"], errors="ignore")
 
-    # 3) уровни из ОБОИХ файлов и сравнения групп/классов по описаниям
+    # уровни (сырые) из shams2 — оставляем как справочник
     try:
-        _, sec_old, div_old, grp_old, cls_old, sub_old = parse_all_sheets_from_bytes(st.session_state.shams_bytes, sheets=None)
-        _, sec_new, div_new, grp_new, cls_new, sub_new = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
+        _, df_sections, df_divisions, _, _, _ = parse_all_sheets_from_bytes(st.session_state.shams2_bytes, sheets=None)
     except Exception as e:
-        st.error(f"Не удалось распарсить уровни: {e}")
+        st.error(f"Не удалось распарсить уровни из shams2: {e}")
         st.stop()
 
-    # сравнения описаний уровней (как Subclass)
-    # ВАЖНО: названия колонок ключа/описания должны совпадать с твоими листами.
-    # Судя по твоему Excel: classes: Class, Class_en; groups: Group, Group_en; subclasses: Subclass, Subclass_en
-    # --- сравнения описаний уровней (как Subclass) ---
-    df_groups_cmp = call_compare_level_descriptions(
-        compare_level_descriptions, grp_old, grp_new, key_col="Group", desc_col="Group_en"
-    )
+    # листы сравнения уровней (как Subclass)
+    df_groups_cmp = st.session_state.get("df_groups_cmp")
+    df_classes_cmp = st.session_state.get("df_classes_cmp")
+    df_subclasses_cmp = st.session_state.get("df_subclasses_cmp")
 
-    df_classes_cmp = call_compare_level_descriptions(
-        compare_level_descriptions, cls_old, cls_new, key_col="Class", desc_col="Class_en"
-    )
-
-    df_subclasses_cmp = call_compare_level_descriptions(
-        compare_level_descriptions, sub_old, sub_new, key_col="Subclass", desc_col="Subclass_en"
-    )
-
-    # 4) подсветка: только SHAMS-колонки
-    highlight_cols = ["status", "Subclass_code"] + [c for c in cols_order if c != "Subclass_code"]
+    # подсветка только SHAMS-колонок на for_review
+    # SHAMS = статус + все src колонки в UI-порядке (Subclass_code и дальше)
+    highlight_cols = ["status"] + cols_order
 
     buf = io.BytesIO()
     write_excel_with_highlight(
         buf=buf,
         export_df=export_df,
         highlight_cols=highlight_cols,
-        df_sections=sec_new,
-        df_divisions=div_new,
-        df_groups=df_groups_cmp,
-        df_classes=df_classes_cmp,
-        df_subclasses=df_subclasses_cmp,
+        df_sections=df_sections,
+        df_divisions=df_divisions,
+        df_groups_cmp=df_groups_cmp,
+        df_classes_cmp=df_classes_cmp,
+        df_subclasses_cmp=df_subclasses_cmp,
+        debug=False,  # поставь True на 1 запуск, если снова не окрасит
     )
     buf.seek(0)
     xlsx_bytes = buf.getvalue()
@@ -681,6 +758,12 @@ if st.session_state.stage == STAGE_DB_EXPORT:
     )
 
     st.markdown("---")
-    if st.button("Назад к сопоставлению с БД"):
-        st.session_state.stage = STAGE_DB_MAPPING
-        st.rerun()
+    c1, c2 = st.columns(2)
+    with c1:
+        if st.button("Назад к сопоставлению с БД"):
+            st.session_state.stage = STAGE_DB_MAPPING
+            st.rerun()
+    with c2:
+        if st.button("Назад к статистике"):
+            st.session_state.stage = STAGE_COMPARE
+            st.rerun()
