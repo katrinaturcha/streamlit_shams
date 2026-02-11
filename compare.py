@@ -4,40 +4,49 @@ import pandas as pd
 
 from utils import normalize_text_for_compare, normalize_subclass_simple
 
-def compare_level_descriptions(df_old: pd.DataFrame, df_new: pd.DataFrame, key_col: str, desc_col: str) -> pd.DataFrame:
+def compare_level_descriptions(df_old: pd.DataFrame, df_new: pd.DataFrame) -> pd.DataFrame:
     """
-    Универсальное сравнение справочника уровней (groups/classes/subclasses):
-    возвращает: key_col, status, Description (лог OLD/NEW)
+    Универсальное сравнение описаний уровней (class, group и т.д.).
+    Ожидается, что в df есть:
+      - колонка с кодом (например Class или Group)
+      - колонка Description или Subclass_en
     """
+
     df_old = df_old.copy()
     df_new = df_new.copy()
 
-    df_old.columns = [str(c).strip() for c in df_old.columns]
-    df_new.columns = [str(c).strip() for c in df_new.columns]
+    # пробуем найти колонку описания
+    desc_cols_old = [c for c in df_old.columns if "description" in c.lower()]
+    desc_cols_new = [c for c in df_new.columns if "description" in c.lower()]
 
-    if key_col not in df_old.columns or key_col not in df_new.columns:
-        raise ValueError(f"Нет ключа {key_col} в одном из датафреймов")
-    if desc_col not in df_old.columns or desc_col not in df_new.columns:
-        raise ValueError(f"Нет описания {desc_col} в одном из датафреймов")
+    if not desc_cols_old or not desc_cols_new:
+        return pd.DataFrame()
 
-    o = df_old[[key_col, desc_col]].rename(columns={desc_col: "desc_old"})
-    n = df_new[[key_col, desc_col]].rename(columns={desc_col: "desc_new"})
+    desc_old = desc_cols_old[0]
+    desc_new = desc_cols_new[0]
 
-    m = o.merge(n, on=key_col, how="outer", indicator=True)
+    # ключ — первая колонка
+    key_old = df_old.columns[0]
+    key_new = df_new.columns[0]
 
-    def _status(r):
-        if r["_merge"] == "left_only":
+    df_old = df_old.rename(columns={key_old: "code", desc_old: "old_description"})
+    df_new = df_new.rename(columns={key_new: "code", desc_new: "new_description"})
+
+    df = df_old.merge(df_new, on="code", how="outer", indicator=True)
+
+    def _status(row):
+        if row["_merge"] == "left_only":
             return "deleted"
-        if r["_merge"] == "right_only":
+        if row["_merge"] == "right_only":
             return "added"
-        old_v = normalize_text_for_compare(r.get("desc_old", ""))
-        new_v = normalize_text_for_compare(r.get("desc_new", ""))
-        return "changed" if old_v != new_v else "not changed"
+        if str(row["old_description"]).strip() != str(row["new_description"]).strip():
+            return "changed"
+        return "not changed"
 
-    m["status"] = m.apply(_status, axis=1)
-    m["Description"] = m.apply(lambda r: _fmt_log(r["status"], r.get("desc_old",""), r.get("desc_new","")), axis=1)
+    df["status"] = df.apply(_status, axis=1)
 
-    return m[[key_col, "status", "Description"]]
+    return df[["code", "status", "old_description", "new_description"]]
+
 
 
 def _to_scalar(x):
