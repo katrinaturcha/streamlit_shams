@@ -623,6 +623,7 @@ if st.session_state.stage == STAGE_COMPARE:
 if st.session_state.stage == STAGE_DB_MAPPING:
     st.subheader("Сопоставление столбцов результата и Базы Данных")
     st.caption("Status не сопоставляется. Subclass_code сопоставляется отдельно и будет во второй позиции после status в выгрузке.")
+    st.markdown("### Тут будет кнопка выбора источника из БД, пока что сюда автоматически подтягивается файл shams_edit1.xlsx")
 
     df = st.session_state.df_compare
     if df is None or df.empty:
