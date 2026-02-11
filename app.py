@@ -198,9 +198,9 @@ def compare_level_like_subclass(
         if stt == "changed":
             return f"OLD: {o}\nNEW: {n}".strip()
         if stt == "deleted":
-            return f"OLD: {o}".strip() if o else ""
+            return o.strip() if o else ""
         if stt == "added":
-            return f"NEW: {n}".strip() if n else ""
+            return n.strip() if n else ""
         return ""
 
     merged[out_desc_name] = merged.apply(_fmt, axis=1)
