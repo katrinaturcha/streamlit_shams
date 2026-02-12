@@ -3,6 +3,7 @@ from __future__ import annotations
 import io
 import re
 from pathlib import Path
+from typing import Optional
 
 import pandas as pd
 import streamlit as st
@@ -11,13 +12,14 @@ from openpyxl.styles import PatternFill
 from header_log import build_header_change_log_from_bytes
 from shams_parser import parse_all_sheets_from_bytes
 from compare import compare_shams, comparison_stats
+from utils import normalize_text_for_compare
 from DB import DB_COLUMNS
 
 # ================== STAGES ==================
 STAGE_UPLOAD = "upload"
 STAGE_SELECT_HEADERS = "select_headers"
 STAGE_MAPPING = "mapping"
-STAGE_HIERARCHY = "hierarchy"          # <-- НОВОЕ
+STAGE_HIERARCHY = "hierarchy"  # <-- НОВОЕ
 STAGE_COMPARE = "compare"
 STAGE_DB_MAPPING = "db_mapping"
 STAGE_DB_EXPORT = "db_export"
@@ -47,22 +49,23 @@ def init_state():
         "headers_new": None,
         "headers_new_selected": None,
 
-        "column_mapping": None,                 # new_col -> old_col|None
+        "column_mapping": None,  # new_col -> old_col|None
 
-        # НОВОЕ: настройки иерархии
+        # НОВОЕ: чекбоксы и роли колонок
         "provider_has_groups": False,
         "provider_has_classes": False,
-        "hierarchy_column_roles": None,         # selected_new_col -> one of ["Activity Code","Class","Group","Общий столбец"]
+        "hierarchy_roles": None,  # {new_col: "Activity Code"|"Class"|"Group"|"Общий столбец"}
 
         "df_compare": None,
         "compare_stats": None,
 
-        # НОВОЕ: отдельные сравнения уровней
-        "df_class_compare": None,
-        "df_group_compare": None,
+        # сравнение уровней
+        "df_groups_cmp": None,
+        "df_classes_cmp": None,
+        "df_subclasses_cmp": None,
 
-        "db_column_mapping": None,              # source_col -> db_col|None
-        "db_cols_order": None,                  # порядок "источников" как в UI (для попарной выгрузки)
+        "db_column_mapping": None,  # source_col -> db_col|None
+        "db_cols_order": None,      # порядок src-колонок как в UI (для попарной выгрузки)
 
         "stage": STAGE_UPLOAD,
         "db_mapping_saved": False,
@@ -114,54 +117,83 @@ def _norm_col(x: str) -> str:
     s = " ".join(s.split())
     return s.strip().lower()
 
-def write_excel_with_highlight(
-    buf: io.BytesIO,
-    export_df: pd.DataFrame,
-    highlight_cols: list[str],
-    df_sections: pd.DataFrame | None = None,
-    df_divisions: pd.DataFrame | None = None,
-    df_groups: pd.DataFrame | None = None,
-    df_classes: pd.DataFrame | None = None,
-    df_group_compare: pd.DataFrame | None = None,
-    df_class_compare: pd.DataFrame | None = None,
-):
+def compare_level_like_subclass(
+    df_old: pd.DataFrame,
+    df_new: pd.DataFrame,
+    key_col: str,
+    desc_col: str,
+    out_key_name: Optional[str] = None,
+    out_desc_name: str = "Description",
+) -> pd.DataFrame:
     """
-    Подсвечивает SHAMS-колонки (highlight_cols) на листе for_review,
-    DB-колонки оставляет без заливки. Добавляет дополнительные листы.
+    Сравнение уровня (Group/Class/Subclass) по ключу и описанию:
+    выход: status, <key>, Description (в виде OLD/NEW как в Subclass)
     """
-    fill = PatternFill(fill_type="solid", start_color="FFFFF2CC", end_color="FFFFF2CC")
+    out_key_name = out_key_name or key_col
 
-    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-        export_df.to_excel(writer, index=False, sheet_name="for_review")
-        ws = writer.sheets["for_review"]
+    if df_old is None or df_old.empty:
+        df_old = pd.DataFrame(columns=[key_col, desc_col])
+    if df_new is None or df_new.empty:
+        df_new = pd.DataFrame(columns=[key_col, desc_col])
 
-        col_to_idx = {_norm_col(name): i + 1 for i, name in enumerate(export_df.columns)}
-        highlight_idxs = []
-        for c in highlight_cols:
-            idx = col_to_idx.get(_norm_col(c))
-            if idx is not None:
-                highlight_idxs.append(idx)
+    df_old = df_old.copy()
+    df_new = df_new.copy()
 
-        max_row = ws.max_row
-        for col_idx in highlight_idxs:
-            for row_idx in range(1, max_row + 1):
-                ws.cell(row=row_idx, column=col_idx).fill = fill
+    df_old.columns = [str(c).strip() for c in df_old.columns]
+    df_new.columns = [str(c).strip() for c in df_new.columns]
 
-        # уровни (из shams2)
-        if df_sections is not None:
-            df_sections.to_excel(writer, index=False, sheet_name="sections")
-        if df_divisions is not None:
-            df_divisions.to_excel(writer, index=False, sheet_name="divisions")
-        if df_groups is not None:
-            df_groups.to_excel(writer, index=False, sheet_name="groups")
-        if df_classes is not None:
-            df_classes.to_excel(writer, index=False, sheet_name="classes")
+    if key_col not in df_old.columns and key_col not in df_new.columns:
+        return pd.DataFrame(columns=["status", out_key_name, out_desc_name])
 
-        # отдельные сравнения (Group/Class)
-        if df_group_compare is not None and not df_group_compare.empty:
-            df_group_compare.to_excel(writer, index=False, sheet_name="group_compare")
-        if df_class_compare is not None and not df_class_compare.empty:
-            df_class_compare.to_excel(writer, index=False, sheet_name="class_compare")
+    need_old = [c for c in [key_col, desc_col] if c in df_old.columns]
+    need_new = [c for c in [key_col, desc_col] if c in df_new.columns]
+    df_old = df_old[need_old].copy()
+    df_new = df_new[need_new].copy()
+
+    df_old = df_old.add_suffix("_old").rename(columns={f"{key_col}_old": key_col})
+    df_new = df_new.add_suffix("_new").rename(columns={f"{key_col}_new": key_col})
+
+    merged = pd.merge(df_old, df_new, on=key_col, how="outer", indicator=True)
+
+    def _initial_status(m):
+        if m == "left_only":
+            return "deleted"
+        if m == "right_only":
+            return "added"
+        return "potentially_changed"
+
+    merged["status"] = merged["_merge"].apply(_initial_status)
+
+    old_desc = f"{desc_col}_old"
+    new_desc = f"{desc_col}_new"
+
+    def _final_status(row):
+        stt = row["status"]
+        if stt in ("added", "deleted"):
+            return stt
+        old_v = normalize_text_for_compare(row.get(old_desc, ""))
+        new_v = normalize_text_for_compare(row.get(new_desc, ""))
+        return "changed" if old_v != new_v else "not changed"
+
+    merged["status"] = merged.apply(_final_status, axis=1)
+
+    def _fmt(row):
+        stt = row["status"]
+        o = "" if pd.isna(row.get(old_desc)) else str(row.get(old_desc)).strip()
+        n = "" if pd.isna(row.get(new_desc)) else str(row.get(new_desc)).strip()
+        if stt == "changed":
+            return f"OLD: {o}\nNEW: {n}".strip()
+        if stt == "deleted":
+            return o.strip() if o else ""
+        if stt == "added":
+            return n.strip() if n else ""
+        return ""
+
+    merged[out_desc_name] = merged.apply(_fmt, axis=1)
+
+    out = merged[[key_col, "status", out_desc_name]].rename(columns={key_col: out_key_name})
+    out = out[["status", out_key_name, out_desc_name]]
+    return out
 
 def _build_export_df(
     df_compare: pd.DataFrame,
@@ -170,8 +202,9 @@ def _build_export_df(
     cols_order: list[str],
 ) -> pd.DataFrame:
     """
-    Делает попарную выгрузку как в UI:
-    status, Subclass_code, (DB-пара для Subclass_code), далее (src_col, db_col) по порядку cols_order.
+    Делает for_review попарно:
+    status, Subclass_code, <db for Subclass_code>, Description, <db for Description>, ...
+    затем несопоставленные db-колонки в конец.
     """
     df_compare = df_compare.copy()
     db_df = db_df.copy()
@@ -196,13 +229,13 @@ def _build_export_df(
     # 1) Subclass_code
     add("Subclass_code")
 
-    # 2) DB-пара для Subclass_code (если выбрана)
+    # 2) пара для Subclass_code (если выбрана)
     target_db_code = (db_map or {}).get("Subclass_code")
     if target_db_code:
         add(target_db_code)
         used_db_cols.add(target_db_code)
 
-    # 3) остальное — строго по UI, попарно
+    # 3) остальное по порядку UI (попарно)
     for src_col in cols_order:
         if src_col in ("Subclass_code", "status"):
             continue
@@ -214,7 +247,7 @@ def _build_export_df(
             add(target_db)
             used_db_cols.add(target_db)
 
-    # 4) несопоставленные DB-колонки (если нужны) — в конец
+    # 4) оставшиеся DB-колонки в конец (если нужны)
     for c in db_df.columns:
         if c == "Subclass_code":
             continue
@@ -223,116 +256,55 @@ def _build_export_df(
 
     return merged[export_cols]
 
-# --------- сравнение уровней (Group/Class) ----------
-def _to_scalar(x):
-    if isinstance(x, pd.Series):
-        non_null = x.dropna()
-        return non_null.iloc[0] if len(non_null) else x.iloc[0]
-    return x
+def write_excel_with_highlight(
+    buf: io.BytesIO,
+    export_df: pd.DataFrame,
+    highlight_cols: list[str],
+    df_sections: pd.DataFrame | None = None,
+    df_divisions: pd.DataFrame | None = None,
+    df_groups_cmp: pd.DataFrame | None = None,
+    df_classes_cmp: pd.DataFrame | None = None,
+    df_subclasses_cmp: pd.DataFrame | None = None,
+    debug: bool = False,
+):
+    """Подсвечивает только SHAMS-колонки (highlight_cols) на листе for_review."""
+    fill = PatternFill(fill_type="solid", start_color="FFFFF2CC", end_color="FFFFF2CC")
 
-def _clean_display_text(val) -> str:
-    if pd.isna(val):
-        return ""
-    s = str(val).strip()
-    while True:
-        s2 = s.lstrip()
-        for prefix in ("- ", "– ", "— ", "• ", "· ", "* ", "•\t", "·\t", "-\t", "–\t", "—\t"):
-            if s2.startswith(prefix):
-                s2 = s2[len(prefix):].lstrip()
-                break
-        else:
-            s2 = s2.lstrip("-–—•·* \t")
-        if s2 == s:
-            break
-        s = s2
-    return s.strip()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        export_df.to_excel(writer, index=False, sheet_name="for_review")
+        ws = writer.sheets["for_review"]
 
-def _fmt_log(status: str, old_val, new_val) -> str:
-    old_val = _to_scalar(old_val)
-    new_val = _to_scalar(new_val)
-    old_s = _clean_display_text(old_val)
-    new_s = _clean_display_text(new_val)
-    if status == "changed":
-        return f"OLD: {old_s}\nNEW: {new_s}".strip()
-    if status == "deleted":
-        return f"OLD: {old_s}".strip() if old_s else ""
-    if status == "added":
-        return f"NEW: {new_s}".strip() if new_s else ""
-    return ""
+        col_to_idx = {_norm_col(name): i + 1 for i, name in enumerate(export_df.columns)}
 
-def _pick_first_existing(df: pd.DataFrame, candidates: list[str]) -> str | None:
-    cols_norm = {_norm_col(c): c for c in df.columns}
-    for c in candidates:
-        real = cols_norm.get(_norm_col(c))
-        if real is not None:
-            return real
-    return None
+        highlight_idxs = []
+        for c in highlight_cols:
+            idx = col_to_idx.get(_norm_col(c))
+            if idx is not None:
+                highlight_idxs.append(idx)
 
-def compare_level_descriptions(
-    df_old_level: pd.DataFrame,
-    df_new_level: pd.DataFrame,
-    level_name: str,
-    key_candidates: list[str],
-    desc_candidates: list[str],
-) -> pd.DataFrame:
-    """
-    Универсально сравнивает описания по коду уровня (Group/Class).
-    Возвращает: <level_name>_code, status, Description (лог).
-    """
-    if df_old_level is None or df_new_level is None:
-        return pd.DataFrame(columns=[f"{level_name}_code", "status", "Description"])
+        if debug:
+            print("EXPORT COLS:", list(export_df.columns))
+            print("HIGHLIGHT COLS:", highlight_cols)
+            print("HIGHLIGHT IDXS:", highlight_idxs)
 
-    df_old = df_old_level.copy()
-    df_new = df_new_level.copy()
+        max_row = ws.max_row
+        for col_idx in highlight_idxs:
+            for row_idx in range(1, max_row + 1):
+                ws.cell(row=row_idx, column=col_idx).fill = fill
 
-    key_old = _pick_first_existing(df_old, key_candidates)
-    key_new = _pick_first_existing(df_new, key_candidates)
-    desc_old = _pick_first_existing(df_old, desc_candidates)
-    desc_new = _pick_first_existing(df_new, desc_candidates)
+        # Дополнительные листы
+        if df_sections is not None:
+            df_sections.to_excel(writer, index=False, sheet_name="sections")
+        if df_divisions is not None:
+            df_divisions.to_excel(writer, index=False, sheet_name="divisions")
 
-    if not key_old or not key_new:
-        return pd.DataFrame(columns=[f"{level_name}_code", "status", "Description"])
-
-    if not desc_old:
-        desc_old = desc_old or desc_candidates[0]
-        df_old[desc_old] = pd.NA
-    if not desc_new:
-        desc_new = desc_new or desc_candidates[0]
-        df_new[desc_new] = pd.NA
-
-    out_key = f"{level_name}_code"
-
-    df_old[out_key] = df_old[key_old].astype(str).str.strip()
-    df_new[out_key] = df_new[key_new].astype(str).str.strip()
-
-    df_old = df_old[df_old[out_key].notna() & (df_old[out_key] != "")]
-    df_new = df_new[df_new[out_key].notna() & (df_new[out_key] != "")]
-
-    df_old = df_old[[out_key, desc_old]].rename(columns={desc_old: "desc_old"})
-    df_new = df_new[[out_key, desc_new]].rename(columns={desc_new: "desc_new"})
-
-    m = df_old.merge(df_new, on=out_key, how="outer", indicator=True)
-
-    def _initial_status(row):
-        if row["_merge"] == "left_only":
-            return "deleted"
-        if row["_merge"] == "right_only":
-            return "added"
-        return "potentially_changed"
-
-    m["status"] = m.apply(_initial_status, axis=1)
-
-    def _final_status(row):
-        if row["status"] in ("added", "deleted"):
-            return row["status"]
-        old_v = str(_to_scalar(row.get("desc_old", "")) or "").strip()
-        new_v = str(_to_scalar(row.get("desc_new", "")) or "").strip()
-        return "changed" if old_v != new_v else "not changed"
-
-    m["status"] = m.apply(_final_status, axis=1)
-    m["Description"] = m.apply(lambda r: _fmt_log(r["status"], r.get("desc_old", ""), r.get("desc_new", "")), axis=1)
-
-    return m[[out_key, "status", "Description"]]
+        # ВАЖНО: эти листы — именно сравнение
+        if df_groups_cmp is not None:
+            df_groups_cmp.to_excel(writer, index=False, sheet_name="groups")
+        if df_classes_cmp is not None:
+            df_classes_cmp.to_excel(writer, index=False, sheet_name="classes")
+        if df_subclasses_cmp is not None:
+            df_subclasses_cmp.to_excel(writer, index=False, sheet_name="subclasses")
 
 # ================== UI ==================
 st.title("Список активити провайдера")
@@ -399,9 +371,10 @@ if st.session_state.stage == STAGE_SELECT_HEADERS:
             st.session_state.compare_stats = None
             st.session_state.db_column_mapping = None
             st.session_state.db_mapping_saved = False
-            st.session_state.hierarchy_column_roles = None
-            st.session_state.df_class_compare = None
-            st.session_state.df_group_compare = None
+            st.session_state.hierarchy_roles = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
             st.session_state.stage = STAGE_MAPPING
             st.rerun()
 
@@ -434,6 +407,7 @@ if st.session_state.stage == STAGE_MAPPING:
         options = ["<нет соответствия>"] + headers_old
         current_value = mapping.get(col_new)
         index = (headers_old.index(current_value) + 1) if current_value in headers_old else 0
+
         selected = st.selectbox(
             f"Соответствие для {col_new}",
             options=options,
@@ -451,25 +425,20 @@ if st.session_state.stage == STAGE_MAPPING:
             st.session_state.stage = STAGE_SELECT_HEADERS
             st.rerun()
     with col2:
-        if st.button("Далее: уровни иерархии"):
-            st.session_state.df_compare = None
-            st.session_state.compare_stats = None
-            st.session_state.df_class_compare = None
-            st.session_state.df_group_compare = None
+        if st.button("Далее: Уровни иерархии"):
             st.session_state.stage = STAGE_HIERARCHY
             st.rerun()
 
 # ==================================================
-# =========== STAGE 3.5 — HIERARCHY =================
+# ============ STAGE 3.5 — HIERARCHY ================
 # ==================================================
 if st.session_state.stage == STAGE_HIERARCHY:
-    st.subheader("Шаг 2.5 — уровни иерархии")
+    st.subheader("Уровни иерархии")
     st.caption(
-        "Укажите, делит ли провайдер активити на группы/классы. "
-        "Затем для каждого выбранного столбца shams2 выберите роль."
+        "Поставьте галочки и укажите роль каждого выбранного столбца shams2. "
+        "Опции «не включать…» нет: либо общий столбец, либо один из уровней."
     )
 
-    # чекбоксы (дословно)
     st.session_state.provider_has_groups = st.checkbox(
         "Провайдер разделяет активити на группы",
         value=bool(st.session_state.provider_has_groups),
@@ -479,30 +448,28 @@ if st.session_state.stage == STAGE_HIERARCHY:
         value=bool(st.session_state.provider_has_classes),
     )
 
-    # варианты в выпадающем списке
+    # варианты выбора роли
     role_options = ["Общий столбец", "Activity Code"]
-    if st.session_state.provider_has_classes:
-        role_options.insert(2, "Class")
-    if st.session_state.provider_has_groups:
-        # если группы есть — автоматически подразумеваем и классы в списке (как ты просила)
+    if st.session_state.provider_has_classes or st.session_state.provider_has_groups:
         if "Class" not in role_options:
             role_options.insert(2, "Class")
-        role_options.insert(3 if "Class" in role_options else 2, "Group")
+    if st.session_state.provider_has_groups:
+        if "Group" not in role_options:
+            role_options.insert(3 if "Class" in role_options else 2, "Group")
 
-    # init mapping roles
     selected_cols = st.session_state.headers_new_selected or []
-    if st.session_state.hierarchy_column_roles is None:
-        st.session_state.hierarchy_column_roles = {c: "Общий столбец" for c in selected_cols}
+
+    if st.session_state.hierarchy_roles is None:
+        st.session_state.hierarchy_roles = {c: "Общий столбец" for c in selected_cols}
     else:
-        cur = {k: v for k, v in st.session_state.hierarchy_column_roles.items() if k in selected_cols}
+        cur = {k: v for k, v in st.session_state.hierarchy_roles.items() if k in selected_cols}
         for c in selected_cols:
             cur.setdefault(c, "Общий столбец")
-        st.session_state.hierarchy_column_roles = cur
+        st.session_state.hierarchy_roles = cur
 
-    roles_map = st.session_state.hierarchy_column_roles
+    roles_map = st.session_state.hierarchy_roles
 
     st.markdown("---")
-    # один столбец
     for col in selected_cols:
         cur_val = roles_map.get(col, "Общий столбец")
         idx = role_options.index(cur_val) if cur_val in role_options else 0
@@ -513,7 +480,7 @@ if st.session_state.stage == STAGE_HIERARCHY:
             key=f"role_{col}",
         )
 
-    st.session_state.hierarchy_column_roles = roles_map
+    st.session_state.hierarchy_roles = roles_map
 
     st.markdown("---")
     col1, col2 = st.columns(2)
@@ -525,8 +492,9 @@ if st.session_state.stage == STAGE_HIERARCHY:
         if st.button("Сохранить и перейти к статистике", type="primary"):
             st.session_state.df_compare = None
             st.session_state.compare_stats = None
-            st.session_state.df_class_compare = None
-            st.session_state.df_group_compare = None
+            st.session_state.df_groups_cmp = None
+            st.session_state.df_classes_cmp = None
+            st.session_state.df_subclasses_cmp = None
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
@@ -537,49 +505,37 @@ if st.session_state.stage == STAGE_COMPARE:
     st.subheader("Статистика сравнения")
 
     if st.session_state.df_compare is None:
-        # парсим оба файла
-        df_full_old, df_sections_old, df_divisions_old, df_groups_old, df_classes_old, df_subclasses_old = parse_all_sheets_from_bytes(
+        df_main_old, df_sections_old, df_divisions_old, df_groups_old, df_classes_old, df_subclasses_old = parse_all_sheets_from_bytes(
             st.session_state.shams_bytes, sheets=None
         )
-        df_full_new, df_sections_new, df_divisions_new, df_groups_new, df_classes_new, df_subclasses_new = parse_all_sheets_from_bytes(
+        df_main_new, df_sections_new, df_divisions_new, df_groups_new, df_classes_new, df_subclasses_new = parse_all_sheets_from_bytes(
             st.session_state.shams2_bytes, sheets=None
         )
 
-        # 1) Subclass (Activity Code): всегда сравниваем описания Subclass (как раньше)
+        # 1) сравнение активити (Subclass) как раньше
         df_compare = compare_shams(
-            df_full_old,
-            df_full_new,
+            df_main_old,
+            df_main_new,
             st.session_state.column_mapping,
-            compare_cols=[],  # только Description (Subclass)
         )
         st.session_state.df_compare = df_compare
         st.session_state.compare_stats = comparison_stats(df_compare)
 
-        # 2) Class: отдельное сравнение, если включено
-        if st.session_state.provider_has_classes:
-            st.session_state.df_class_compare = compare_level_descriptions(
-                df_old_level=df_classes_old,
-                df_new_level=df_classes_new,
-                level_name="Class",
-                key_candidates=["Class_code", "Class", "Class Code", "code"],
-                desc_candidates=["Class_en", "Description", "title_en", "name_en"],
-            )
-        else:
-            st.session_state.df_class_compare = pd.DataFrame(columns=["Class_code", "status", "Description"])
+        # 2) сравнения уровней (как ты дала функцию)
+        #    важно: имена колонок key/desc должны соответствовать parse_all_sheets_from_bytes
+        #    здесь оставляю "как было": Group_code/Group_en, Class_code/Class_en, Subclass_code/Subclass_en
+        st.session_state.df_groups_cmp = (
+            compare_level_like_subclass(df_groups_old, df_groups_new, key_col="Group_code", desc_col="Group_en", out_key_name="Group_code")
+            if st.session_state.provider_has_groups else pd.DataFrame(columns=["status", "Group_code", "Description"])
+        )
+        st.session_state.df_classes_cmp = (
+            compare_level_like_subclass(df_classes_old, df_classes_new, key_col="Class_code", desc_col="Class_en", out_key_name="Class_code")
+            if (st.session_state.provider_has_classes or st.session_state.provider_has_groups) else pd.DataFrame(columns=["status", "Class_code", "Description"])
+        )
+        st.session_state.df_subclasses_cmp = (
+            compare_level_like_subclass(df_subclasses_old, df_subclasses_new, key_col="Subclass_code", desc_col="Subclass_en", out_key_name="Subclass_code")
+        )
 
-        # 3) Group: отдельное сравнение, если включено
-        if st.session_state.provider_has_groups:
-            st.session_state.df_group_compare = compare_level_descriptions(
-                df_old_level=df_groups_old,
-                df_new_level=df_groups_new,
-                level_name="Group",
-                key_candidates=["Group_code", "Group", "Group Code", "code"],
-                desc_candidates=["Group_en", "Description", "title_en", "name_en"],
-            )
-        else:
-            st.session_state.df_group_compare = pd.DataFrame(columns=["Group_code", "status", "Description"])
-
-    # --- вывод статистики Subclass ---
     stats_df = st.session_state.compare_stats
     stats = dict(zip(stats_df["metric"], stats_df["value"]))
 
@@ -588,35 +544,9 @@ if st.session_state.stage == STAGE_COMPARE:
 **Количество активити в новом файле:** {stats['Количество строк в новом файле']}  
 **Добавлено активити:** {stats['Добавлено']}  
 **Удалено активити:** {stats['Удалено']}  
-**Внесены изменения (Activity Code / Description):** {stats['Изменено (по выбранным столбцам)']}  
+**Внесены изменения:** {stats['Изменено (по выбранным столбцам)']}  
 **Остались без изменений:** {stats['Не изменено']}  
 """)
-
-    # --- доп. статистика по Class/Group ---
-    def _mini_stats(df_level: pd.DataFrame, label: str):
-        if df_level is None or df_level.empty or "status" not in df_level.columns:
-            return
-        added = (df_level["status"] == "added").sum()
-        deleted = (df_level["status"] == "deleted").sum()
-        changed = (df_level["status"] == "changed").sum()
-        not_changed = (df_level["status"] == "not changed").sum()
-        total_old = df_level["status"].isin(["not changed", "changed", "deleted"]).sum()
-        total_new = df_level["status"].isin(["not changed", "changed", "added"]).sum()
-
-        st.markdown(f"""
-**{label}:**  
-• строк в старом: {total_old}  
-• строк в новом: {total_new}  
-• добавлено: {added}  
-• удалено: {deleted}  
-• изменено (Description): {changed}  
-• без изменений: {not_changed}  
-""")
-
-    if st.session_state.provider_has_classes:
-        _mini_stats(st.session_state.df_class_compare, "Class")
-    if st.session_state.provider_has_groups:
-        _mini_stats(st.session_state.df_group_compare, "Group")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -633,35 +563,21 @@ if st.session_state.stage == STAGE_COMPARE:
 # ==================================================
 if st.session_state.stage == STAGE_DB_MAPPING:
     st.subheader("Сопоставление столбцов результата и Базы Данных")
-    st.caption(
-        "Сопоставьте только то, что хотите видеть рядом со значениями БД. "
-        "status не сопоставляется (он всегда первым в выгрузке)."
-    )
+    st.caption("status не сопоставляется. Subclass_code сопоставляется и идёт первой парой после status.")
 
     df = st.session_state.df_compare
     if df is None or df.empty:
         st.error("Нет результата сравнения. Вернитесь на шаг сравнения.")
         st.stop()
 
-    legacy_cols = [c for c in df.columns if c.endswith("_old") or c.endswith("_new") or c == "diff_columns"]
-    if legacy_cols:
-        st.warning("Результат сравнения выглядит как старый формат. Пересчитываю...")
-        st.session_state.df_compare = None
-        st.session_state.compare_stats = None
-        st.session_state.stage = STAGE_COMPARE
-        st.rerun()
-
-    # порядок UI: Subclass_code первым (но status НЕ маппим)
-    cols_to_map = []
+    # колонки для сопоставления с БД: Subclass_code + остальное (Description первым)
+    cols_to_map: list[str] = []
     if "Subclass_code" in df.columns:
         cols_to_map.append("Subclass_code")
 
     other = [c for c in df.columns if c not in ("Subclass_code", "status", "Subclass")]
-
-    # Description первым среди other
     if "Description" in other:
         other = ["Description"] + [c for c in other if c != "Description"]
-
     cols_to_map += other
     cols_to_map = list(dict.fromkeys(cols_to_map))
 
@@ -674,7 +590,6 @@ if st.session_state.stage == STAGE_DB_MAPPING:
     st.session_state.db_column_mapping = current_map
     mapping = st.session_state.db_column_mapping
 
-    # UI: один столбец
     for col in cols_to_map:
         cur_val = mapping.get(col)
         selected = st.selectbox(
@@ -729,16 +644,15 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         cols_order=cols_order,
     )
 
-    # уровни из shams2 (для справочников)
+    # уровни из нового файла (sections/divisions) + сравнения (groups/classes/subclasses)
     try:
-        _, df_sections, df_divisions, df_groups, df_classes, _ = parse_all_sheets_from_bytes(
+        _, df_sections, df_divisions, _, _, _ = parse_all_sheets_from_bytes(
             st.session_state.shams2_bytes, sheets=None
         )
     except Exception as e:
         st.error(f"Не удалось распарсить уровни из shams2: {e}")
         st.stop()
 
-    # подсветка: только SHAMS-колонки (status + Subclass_code + все src из cols_order)
     highlight_cols = ["status", "Subclass_code"] + [c for c in cols_order if c not in ("status", "Subclass_code")]
 
     buf = io.BytesIO()
@@ -748,10 +662,10 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         highlight_cols=highlight_cols,
         df_sections=df_sections,
         df_divisions=df_divisions,
-        df_groups=df_groups,
-        df_classes=df_classes,
-        df_group_compare=st.session_state.df_group_compare,
-        df_class_compare=st.session_state.df_class_compare,
+        df_groups_cmp=st.session_state.df_groups_cmp,
+        df_classes_cmp=st.session_state.df_classes_cmp,
+        df_subclasses_cmp=st.session_state.df_subclasses_cmp,
+        debug=False,
     )
     buf.seek(0)
     xlsx_bytes = buf.getvalue()
