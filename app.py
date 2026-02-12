@@ -79,6 +79,14 @@ def init_state():
         "stage": STAGE_UPLOAD,
         "provider_has_groups": False,
         "provider_has_classes": False,
+        # --- DB preload UI (draft) ---
+        "selected_provider": "SHAMS",
+        "pre_db_mapping": {
+            "activity_code": None,
+            "official_title_en": None,
+            "authority": None,
+            "service": None,
+        },
 
     }
     for k, v in defaults.items():
@@ -795,3 +803,94 @@ if st.session_state.stage == STAGE_DB_EXPORT:
         if st.button("Назад к статистике"):
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
+
+    st.markdown("#### Тут будет кнопка загрузка отредактированного менеджером файла")
+    st.caption("Загруженный файл будет сопоставляться со столбцами в БД? ")
+
+    # ===================== DRAFT UI: provider + pre-DB mapping =====================
+    st.markdown("### Выберите провайдера")
+    provider = st.selectbox(
+        label="",
+        options=["SHAMS", "Meydan", "IFZA"],
+        index=["SHAMS", "Meydan", "IFZA"].index(st.session_state.get("selected_provider", "SHAMS")),
+        key="selected_provider",
+    )
+
+    st.markdown("---")
+    st.markdown("### Сопоставление столбцов перед загрузкой в БД")
+
+    DB_FIELD_OPTIONS = [
+        "id",
+        "created_at",
+        "updated_at",
+        "provider_id",
+        "activity_type_class_id",
+        "activity_type_group_id",
+        "business_activity_id",
+        "license_type_id",
+        "is_active",
+        "priority",
+        "authorized_capital_min_amount",
+        "requirements_for_authorized_capital",
+        "need_additional_permissions",
+        "there_are_additional_requirements",
+        "there_are_special_requirements_for_founder",
+        "there_are_special_requirements_for_infrastructure",
+        "can_be_combined_with_other_activities",
+        "for_branches_of_foreign_companies_only",
+        "activities_only_outside_country_of_registration",
+        "activities_only_within_territory_of_country_of_registration",
+        "title_by_provider",
+        "title_by_provider_ru",
+        "title_by_provider_en",
+        "business_activity_code",
+        "description",
+        "description_ru",
+        "description_en",
+        "note",
+    ]
+
+    # держим значения в одном объекте в session_state
+    st.session_state.setdefault("pre_db_mapping", {})
+    pre = st.session_state["pre_db_mapping"]
+
+
+    def _idx(val: str | None) -> int:
+        return (DB_FIELD_OPTIONS.index(val) if val in DB_FIELD_OPTIONS else 0)
+
+
+    st.markdown("**1. Введите код бизнес-деятельности**")
+    pre["activity_code"] = st.selectbox(
+        label="",
+        options=DB_FIELD_OPTIONS,
+        index=_idx(pre.get("activity_code")),
+        key="pre_db_activity_code",
+    )
+
+    st.markdown("**2. Официальное название бизнес-деятельности en**")
+    pre["official_title_en"] = st.selectbox(
+        label="",
+        options=DB_FIELD_OPTIONS,
+        index=_idx(pre.get("official_title_en")),
+        key="pre_db_official_title_en",
+    )
+
+    st.markdown("**3. 1. Выберите орган**")
+    pre["authority"] = st.selectbox(
+        label="",
+        options=DB_FIELD_OPTIONS,
+        index=_idx(pre.get("authority")),
+        key="pre_db_authority",
+    )
+
+    st.markdown("**4. 2. Выберите услугу**")
+    pre["service"] = st.selectbox(
+        label="",
+        options=DB_FIELD_OPTIONS,
+        index=_idx(pre.get("service")),
+        key="pre_db_service",
+    )
+
+    st.session_state["pre_db_mapping"] = pre
+    # ==============================================================================
+
