@@ -77,6 +77,9 @@ def init_state():
 
         # stage
         "stage": STAGE_UPLOAD,
+        "provider_has_groups": False,
+        "provider_has_classes": False,
+
     }
     for k, v in defaults.items():
         st.session_state.setdefault(k, v)
@@ -471,6 +474,8 @@ if st.session_state.stage == STAGE_MAPPING:
             st.session_state.df_groups_cmp = None
             st.session_state.df_classes_cmp = None
             st.session_state.df_subclasses_cmp = None
+            st.session_state.provider_has_groups = False
+            st.session_state.provider_has_classes = False
 
             st.session_state.stage = STAGE_HIERARCHY
             st.rerun()
@@ -479,19 +484,45 @@ if st.session_state.stage == STAGE_MAPPING:
 # ==================================================
 # ============ STAGE 3.5 — HIERARCHY ===============
 # ==================================================
+# ==================================================
+# ============ STAGE 3.5 — HIERARCHY ===============
+# ==================================================
 if st.session_state.stage == STAGE_HIERARCHY:
-    st.subheader("Шаг 3 — уровни иерархии")
-    st.caption("Укажите количество уровней и определите, к какому уровню относится каждый столбец shams2.")
+    st.subheader('Шаг 3 — "Уровни иерархии"')
+    st.caption("Укажите, как провайдер структурирует активити, и назначьте роль каждому выбранному столбцу.")
 
-    levels = st.radio(
-        "Сколько уровней иерархии?",
-        options=[1, 2, 3],
-        index=[1, 2, 3].index(st.session_state.get("hier_levels", 1)),
-        horizontal=True,
+    # --- ВАЖНО: добавь эти ключи в init_state() defaults ---
+    # "provider_has_groups": False,
+    # "provider_has_classes": False,
+
+    # --- чек-боксы (дословно) ---
+    has_groups = st.checkbox(
+        "Провайдер разделяет активити на группы",
+        value=st.session_state.get("provider_has_groups", False),
+        key="chk_provider_groups",
     )
-    st.session_state.hier_levels = levels
+    has_classes = st.checkbox(
+        "Провайдер разделяет активити на классы",
+        value=st.session_state.get("provider_has_classes", False),
+        key="chk_provider_classes",
+    )
 
-    # Кандидаты: выбранные колонки нового файла
+    # если есть группы — классы подразумеваются
+    if has_groups and not has_classes:
+        has_classes = True
+
+    st.session_state.provider_has_groups = has_groups
+    st.session_state.provider_has_classes = has_classes
+
+    # --- варианты ролей в выпадающем списке ---
+    # Никакого "не включать" (по твоей просьбе убрали)
+    role_options: list[str] = ["Общий столбец", "Activity Code"]
+    if has_classes:
+        role_options.insert(1, "Class")
+    if has_groups:
+        role_options.insert(1, "Group")
+
+    # --- кандидаты: выбранные колонки нового файла ---
     cols = st.session_state.headers_new_selected or []
     if not cols:
         st.warning("Нет выбранных колонок. Вернитесь назад.")
@@ -500,40 +531,34 @@ if st.session_state.stage == STAGE_HIERARCHY:
             st.rerun()
         st.stop()
 
-    # init roles
+    # --- init roles (храним в st.session_state.hier_col_roles как раньше) ---
     if st.session_state.hier_col_roles is None:
-        st.session_state.hier_col_roles = {c: "COMMON" for c in cols}
-        # типовые авто-эвристики
+        st.session_state.hier_col_roles = {c: "Общий столбец" for c in cols}
+
+        # простые авто-эвристики
         for c in cols:
             cl = _norm_col(c)
             if cl == "subclass":
-                st.session_state.hier_col_roles[c] = "L1"
+                st.session_state.hier_col_roles[c] = "Activity Code"
             elif cl == "class":
-                st.session_state.hier_col_roles[c] = "L2"
+                st.session_state.hier_col_roles[c] = "Class" if has_classes else "Activity Code"
             elif cl == "group":
-                st.session_state.hier_col_roles[c] = "L3"
-            elif "description" in cl or cl in ("subclass_en", "description", "desc"):
-                st.session_state.hier_col_roles[c] = "COMMON"
+                st.session_state.hier_col_roles[c] = "Group" if has_groups else ("Class" if has_classes else "Activity Code")
+            elif "description" in cl or cl in ("subclass_en", "desc"):
+                st.session_state.hier_col_roles[c] = "Общий столбец"
 
     role_map = st.session_state.hier_col_roles
 
-    options = ["L1", "L2", "L3", "COMMON", "SKIP"]
-    labels = {
-        "L1": "Acivity Code",
-        "L2": "Class",
-        "L3": "Group",
-        "COMMON": "Общий столбец",
-        "SKIP": "не включать в сопоставление",
-    }
-
-    # Один столбец UI
+    # --- UI: один столбец ---
     for c in cols:
-        cur = role_map.get(c, "COMMON")
+        cur = role_map.get(c, "Общий столбец")
+        if cur not in role_options:
+            cur = "Общий столбец"
+
         sel = st.selectbox(
             label=c,
-            options=options,
-            index=options.index(cur) if cur in options else options.index("COMMON"),
-            format_func=lambda x: labels.get(x, x),
+            options=role_options,
+            index=role_options.index(cur),
             key=f"hier_{c}",
         )
         role_map[c] = sel
@@ -555,6 +580,7 @@ if st.session_state.stage == STAGE_HIERARCHY:
             st.session_state.df_subclasses_cmp = None
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
+
 
 
 # ==================================================
