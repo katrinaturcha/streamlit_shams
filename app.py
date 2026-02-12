@@ -342,17 +342,19 @@ st.markdown("---")
 # ==================================================
 # =============== STAGE 1 — UPLOAD =================
 # ==================================================
-st.markdown("### Выберите провайдера (здесь парсер подтянет provider_id из БД)")
-provider = st.selectbox(
-    label="",
-    options=["SHAMS", "Meydan", "IFZA"],
-    index=["SHAMS", "Meydan", "IFZA"].index(st.session_state.get("selected_provider", "SHAMS")),
-    key="selected_provider",
-)
 
-st.markdown("---")
 
 if st.session_state.stage == STAGE_UPLOAD:
+    st.markdown("### Выберите провайдера (здесь парсер подтянет provider_id из БД)")
+    provider = st.selectbox(
+        label="",
+        options=["SHAMS", "Meydan", "IFZA"],
+        index=["SHAMS", "Meydan", "IFZA"].index(st.session_state.get("selected_provider", "SHAMS")),
+        key="selected_provider",
+    )
+
+    st.markdown("---")
+
     st.subheader("Укажите новый источник")
 
     uploaded = st.file_uploader("Загрузите файл shams2", type=["xlsx"])
