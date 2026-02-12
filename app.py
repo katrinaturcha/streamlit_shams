@@ -669,7 +669,7 @@ if st.session_state.stage == STAGE_COMPARE:
 if st.session_state.stage == STAGE_DB_MAPPING:
     st.subheader("Сопоставление столбцов результата и Базы Данных")
     st.caption("Status не сопоставляется. Subclass_code сопоставляется отдельно и будет во второй позиции после status в выгрузке.")
-    st.button("#### Тут будет кнопка выбора источника из БД")
+    st.button("#### Тут будет кнопка выбора источника из БД (или автоматически подтягиваться таблица из БД provider_activity_type с provider_id = SHAMS id)")
     st.caption("Пока что автоматически используется файл shams_edit1.xlsx")
 
     df = st.session_state.df_compare
