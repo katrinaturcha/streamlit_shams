@@ -342,6 +342,16 @@ st.markdown("---")
 # ==================================================
 # =============== STAGE 1 — UPLOAD =================
 # ==================================================
+st.markdown("### Выберите провайдера (здесь парсер подтянет provider_id из БД)")
+provider = st.selectbox(
+    label="",
+    options=["SHAMS", "Meydan", "IFZA"],
+    index=["SHAMS", "Meydan", "IFZA"].index(st.session_state.get("selected_provider", "SHAMS")),
+    key="selected_provider",
+)
+
+st.markdown("---")
+
 if st.session_state.stage == STAGE_UPLOAD:
     st.subheader("Укажите новый источник")
 
@@ -804,19 +814,11 @@ if st.session_state.stage == STAGE_DB_EXPORT:
             st.session_state.stage = STAGE_COMPARE
             st.rerun()
 
-    st.button("#### Тут будет кнопка загрузка отредактированного менеджером файла")
+    st.button("#### Тут будет кнопка загрузки отредактированного менеджером файла")
     st.caption("Загруженный файл будет сопоставляться со столбцами в БД? или при загрузке будет автоматическое сопоставление?")
 
     # ===================== DRAFT UI: provider + pre-DB mapping =====================
-    st.markdown("### Выберите провайдера (это может быть первым шагом или автоматически при переходе на вкладку провайдера)")
-    provider = st.selectbox(
-        label="",
-        options=["SHAMS", "Meydan", "IFZA"],
-        index=["SHAMS", "Meydan", "IFZA"].index(st.session_state.get("selected_provider", "SHAMS")),
-        key="selected_provider",
-    )
 
-    st.markdown("---")
     st.markdown("### Сопоставление столбцов перед загрузкой в БД (можно опустить)")
 
     DB_FIELD_OPTIONS = [
