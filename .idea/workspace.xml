@@ -4,8 +4,10 @@
     <option name="autoReloadType" value="SELECTIVE" />
   </component>
   <component name="ChangeListManager">
-    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="status_deleted">
-      <change beforePath="$PROJECT_DIR$/compare.py" beforeDir="false" afterPath="$PROJECT_DIR$/compare.py" afterDir="false" />
+    <list default="true" id="80770144-7550-4a26-b8e1-335a021f806c" name="Changes" comment="edit_but4">
+      <change afterPath="$PROJECT_DIR$/export_shams_data.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/misc.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/misc.xml" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -42,6 +44,9 @@
 }</component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\e.turchaninova\PycharmProjects\streamlit_shams" />
+    </key>
+    <key name="MoveFile.RECENT_KEYS">
       <recent name="C:\Users\e.turchaninova\PycharmProjects\streamlit_shams" />
     </key>
   </component>
@@ -245,30 +250,227 @@
       <option name="project" value="LOCAL" />
       <updated>1770386067510</updated>
     </task>
-    <option name="localTasksCounter" value="24" />
+    <task id="LOCAL-00024" summary="hierarchy">
+      <option name="closed" value="true" />
+      <created>1770808366317</created>
+      <option name="number" value="00024" />
+      <option name="presentableId" value="LOCAL-00024" />
+      <option name="project" value="LOCAL" />
+      <updated>1770808366317</updated>
+    </task>
+    <task id="LOCAL-00025" summary="hierarchy2">
+      <option name="closed" value="true" />
+      <created>1770811365513</created>
+      <option name="number" value="00025" />
+      <option name="presentableId" value="LOCAL-00025" />
+      <option name="project" value="LOCAL" />
+      <updated>1770811365513</updated>
+    </task>
+    <task id="LOCAL-00026" summary="compare_level_descriptions">
+      <option name="closed" value="true" />
+      <created>1770811708783</created>
+      <option name="number" value="00026" />
+      <option name="presentableId" value="LOCAL-00026" />
+      <option name="project" value="LOCAL" />
+      <updated>1770811708783</updated>
+    </task>
+    <task id="LOCAL-00027" summary="class_group">
+      <option name="closed" value="true" />
+      <created>1770813491691</created>
+      <option name="number" value="00027" />
+      <option name="presentableId" value="LOCAL-00027" />
+      <option name="project" value="LOCAL" />
+      <updated>1770813491691</updated>
+    </task>
+    <task id="LOCAL-00028" summary="df_groups_camp">
+      <option name="closed" value="true" />
+      <created>1770813990208</created>
+      <option name="number" value="00028" />
+      <option name="presentableId" value="LOCAL-00028" />
+      <option name="project" value="LOCAL" />
+      <updated>1770813990208</updated>
+    </task>
+    <task id="LOCAL-00029" summary="call_compare_level_descriptions">
+      <option name="closed" value="true" />
+      <created>1770814413470</created>
+      <option name="number" value="00029" />
+      <option name="presentableId" value="LOCAL-00029" />
+      <option name="project" value="LOCAL" />
+      <updated>1770814413470</updated>
+    </task>
+    <task id="LOCAL-00030" summary="all_change">
+      <option name="closed" value="true" />
+      <created>1770816631676</created>
+      <option name="number" value="00030" />
+      <option name="presentableId" value="LOCAL-00030" />
+      <option name="project" value="LOCAL" />
+      <updated>1770816631676</updated>
+    </task>
+    <task id="LOCAL-00031" summary="OLD_NEW">
+      <option name="closed" value="true" />
+      <created>1770817243847</created>
+      <option name="number" value="00031" />
+      <option name="presentableId" value="LOCAL-00031" />
+      <option name="project" value="LOCAL" />
+      <updated>1770817243847</updated>
+    </task>
+    <task id="LOCAL-00032" summary="markdown">
+      <option name="closed" value="true" />
+      <created>1770818281989</created>
+      <option name="number" value="00032" />
+      <option name="presentableId" value="LOCAL-00032" />
+      <option name="project" value="LOCAL" />
+      <updated>1770818281989</updated>
+    </task>
+    <task id="LOCAL-00033" summary="markdown2">
+      <option name="closed" value="true" />
+      <created>1770818369551</created>
+      <option name="number" value="00033" />
+      <option name="presentableId" value="LOCAL-00033" />
+      <option name="project" value="LOCAL" />
+      <updated>1770818369551</updated>
+    </task>
+    <task id="LOCAL-00034" summary="check_box">
+      <option name="closed" value="true" />
+      <created>1770879164384</created>
+      <option name="number" value="00034" />
+      <option name="presentableId" value="LOCAL-00034" />
+      <option name="project" value="LOCAL" />
+      <updated>1770879164385</updated>
+    </task>
+    <task id="LOCAL-00035" summary="check_box2">
+      <option name="closed" value="true" />
+      <created>1770880310517</created>
+      <option name="number" value="00035" />
+      <option name="presentableId" value="LOCAL-00035" />
+      <option name="project" value="LOCAL" />
+      <updated>1770880310517</updated>
+    </task>
+    <task id="LOCAL-00036" summary="check_box3">
+      <option name="closed" value="true" />
+      <created>1770881337727</created>
+      <option name="number" value="00036" />
+      <option name="presentableId" value="LOCAL-00036" />
+      <option name="project" value="LOCAL" />
+      <updated>1770881337727</updated>
+    </task>
+    <task id="LOCAL-00037" summary="return">
+      <option name="closed" value="true" />
+      <created>1770881598933</created>
+      <option name="number" value="00037" />
+      <option name="presentableId" value="LOCAL-00037" />
+      <option name="project" value="LOCAL" />
+      <updated>1770881598933</updated>
+    </task>
+    <task id="LOCAL-00038" summary="STAGE_HIERARCHY">
+      <option name="closed" value="true" />
+      <created>1770882253489</created>
+      <option name="number" value="00038" />
+      <option name="presentableId" value="LOCAL-00038" />
+      <option name="project" value="LOCAL" />
+      <updated>1770882253489</updated>
+    </task>
+    <task id="LOCAL-00039" summary="STAGE_UPLOAD">
+      <option name="closed" value="true" />
+      <created>1770883245473</created>
+      <option name="number" value="00039" />
+      <option name="presentableId" value="LOCAL-00039" />
+      <option name="project" value="LOCAL" />
+      <updated>1770883245473</updated>
+    </task>
+    <task id="LOCAL-00040" summary="edit">
+      <option name="closed" value="true" />
+      <created>1770883625359</created>
+      <option name="number" value="00040" />
+      <option name="presentableId" value="LOCAL-00040" />
+      <option name="project" value="LOCAL" />
+      <updated>1770883625359</updated>
+    </task>
+    <task id="LOCAL-00041" summary="edit_button">
+      <option name="closed" value="true" />
+      <created>1770883688857</created>
+      <option name="number" value="00041" />
+      <option name="presentableId" value="LOCAL-00041" />
+      <option name="project" value="LOCAL" />
+      <updated>1770883688857</updated>
+    </task>
+    <task id="LOCAL-00042" summary="edit_start">
+      <option name="closed" value="true" />
+      <created>1770884030203</created>
+      <option name="number" value="00042" />
+      <option name="presentableId" value="LOCAL-00042" />
+      <option name="project" value="LOCAL" />
+      <updated>1770884030203</updated>
+    </task>
+    <task id="LOCAL-00043" summary="edit_start">
+      <option name="closed" value="true" />
+      <created>1770884223476</created>
+      <option name="number" value="00043" />
+      <option name="presentableId" value="LOCAL-00043" />
+      <option name="project" value="LOCAL" />
+      <updated>1770884223476</updated>
+    </task>
+    <task id="LOCAL-00044" summary="edit_but">
+      <option name="closed" value="true" />
+      <created>1770886554899</created>
+      <option name="number" value="00044" />
+      <option name="presentableId" value="LOCAL-00044" />
+      <option name="project" value="LOCAL" />
+      <updated>1770886554899</updated>
+    </task>
+    <task id="LOCAL-00045" summary="edit_but2">
+      <option name="closed" value="true" />
+      <created>1770886757487</created>
+      <option name="number" value="00045" />
+      <option name="presentableId" value="LOCAL-00045" />
+      <option name="project" value="LOCAL" />
+      <updated>1770886757487</updated>
+    </task>
+    <task id="LOCAL-00046" summary="edit_but3">
+      <option name="closed" value="true" />
+      <created>1770886838943</created>
+      <option name="number" value="00046" />
+      <option name="presentableId" value="LOCAL-00046" />
+      <option name="project" value="LOCAL" />
+      <updated>1770886838943</updated>
+    </task>
+    <task id="LOCAL-00047" summary="edit_but4">
+      <option name="closed" value="true" />
+      <created>1770886880262</created>
+      <option name="number" value="00047" />
+      <option name="presentableId" value="LOCAL-00047" />
+      <option name="project" value="LOCAL" />
+      <updated>1770886880262</updated>
+    </task>
+    <option name="localTasksCounter" value="48" />
     <servers />
   </component>
   <component name="VcsManagerConfiguration">
-    <MESSAGE value="first iter" />
-    <MESSAGE value="alter compare" />
-    <MESSAGE value="section, compare_shams" />
-    <MESSAGE value="load files" />
-    <MESSAGE value="compare shams subclass_en" />
-    <MESSAGE value="load files add description" />
-    <MESSAGE value="compare columns" />
-    <MESSAGE value="shams_edit1" />
-    <MESSAGE value="fix bug" />
-    <MESSAGE value="compare py" />
-    <MESSAGE value="final note" />
-    <MESSAGE value="the most perfect version" />
-    <MESSAGE value="added_mapping_new_prompt" />
-    <MESSAGE value="db_mapping_log" />
-    <MESSAGE value="no_dubl_db" />
-    <MESSAGE value="vozvrat_Ext_Part" />
-    <MESSAGE value="button_actual" />
-    <MESSAGE value="one_column" />
     <MESSAGE value="list_deleted" />
     <MESSAGE value="status_deleted" />
-    <option name="LAST_COMMIT_MESSAGE" value="status_deleted" />
+    <MESSAGE value="hierarchy" />
+    <MESSAGE value="hierarchy2" />
+    <MESSAGE value="compare_level_descriptions" />
+    <MESSAGE value="class_group" />
+    <MESSAGE value="df_groups_camp" />
+    <MESSAGE value="call_compare_level_descriptions" />
+    <MESSAGE value="all_change" />
+    <MESSAGE value="OLD_NEW" />
+    <MESSAGE value="markdown" />
+    <MESSAGE value="markdown2" />
+    <MESSAGE value="check_box" />
+    <MESSAGE value="check_box2" />
+    <MESSAGE value="check_box3" />
+    <MESSAGE value="return" />
+    <MESSAGE value="STAGE_HIERARCHY" />
+    <MESSAGE value="STAGE_UPLOAD" />
+    <MESSAGE value="edit" />
+    <MESSAGE value="edit_button" />
+    <MESSAGE value="edit_start" />
+    <MESSAGE value="edit_but" />
+    <MESSAGE value="edit_but2" />
+    <MESSAGE value="edit_but3" />
+    <MESSAGE value="edit_but4" />
+    <option name="LAST_COMMIT_MESSAGE" value="edit_but4" />
   </component>
 </project>

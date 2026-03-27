@@ -87,6 +87,8 @@ def init_state():
             "authority": None,
             "service": None,
         },
+        "manager_processed_bytes": None,
+        "manager_db_mapping_result": None,
 
     }
     for k, v in defaults.items():
@@ -821,80 +823,128 @@ if st.session_state.stage == STAGE_DB_EXPORT:
 
     # ===================== DRAFT UI: provider + pre-DB mapping =====================
 
-    st.markdown("### Сопоставление столбцов перед загрузкой в БД (если можно опустить, то где словарь сопоставления полей на русском и английском (как в бд)?)")
-
-    DB_FIELD_OPTIONS = [
-        "id",
-        "created_at",
-        "updated_at",
-        "provider_id",
-        "activity_type_class_id",
-        "activity_type_group_id",
-        "business_activity_id",
-        "license_type_id",
-        "is_active",
-        "priority",
-        "authorized_capital_min_amount",
-        "requirements_for_authorized_capital",
-        "need_additional_permissions",
-        "there_are_additional_requirements",
-        "there_are_special_requirements_for_founder",
-        "there_are_special_requirements_for_infrastructure",
-        "can_be_combined_with_other_activities",
-        "for_branches_of_foreign_companies_only",
-        "activities_only_outside_country_of_registration",
-        "activities_only_within_territory_of_country_of_registration",
-        "title_by_provider",
-        "title_by_provider_ru",
-        "title_by_provider_en",
-        "business_activity_code",
-        "description",
-        "description_ru",
-        "description_en",
-        "note",
-    ]
-
-    # держим значения в одном объекте в session_state
-    st.session_state.setdefault("pre_db_mapping", {})
-    pre = st.session_state["pre_db_mapping"]
-
-
-    def _idx(val: str | None) -> int:
-        return (DB_FIELD_OPTIONS.index(val) if val in DB_FIELD_OPTIONS else 0)
+    def build_ru_to_db_field_mapping() -> dict[str, str]:
+        return {
+            "ID": "id",
+            "Официальное Наименование бизнес-деятельности у провайдера en": "title_by_provider_en",
+            "Официальное Наименование бизнес-деятельности у провайдера ru": "title_by_provider_ru",
+            "Введите код бизнес-деятельности": "business_activity_code",
+            "Выберите группу": "activity_type_group_id",
+            "Выберите класс": "activity_type_class_id",
+            "ИД Универсальное наименование бизнес-деятельности": "business_activity_id",
+            "Тип лицензии": "license_type_id",
+            "Приоритет": "priority",
+            "Описание вида деятельности en (=ПУСТО)": "description_en",
+            "Описание вида деятельности ru (=ПУСТО)": "description_ru",
+            "Примечание (для внутреннего использования)": "note",
+            "Дополнительные требования, условия ": "note",
+            "Нужны дополнительные разрешения (NOC)": "need_additional_permissions",
+            "Существуют специальные требования к уставному капиталу": "requirements_for_authorized_capital",
+            "Существуют специальные требования к инфраструктуре": "there_are_special_requirements_for_infrastructure",
+            "Существуют специальные требования к учредителю": "there_are_special_requirements_for_founder",
+            "Можно совмещать с другими активити": "can_be_combined_with_other_activities",
+            "Деятельность только на территории страны регистрации": "activities_only_within_territory_of_country_of_registration",
+            "Деятельность только за пределами страны регистрации": "activities_only_outside_country_of_registration",
+            "Только для филиалов иностранных компаний": "for_branches_of_foreign_companies_only",
+            "Существуют дополнительные требования, условия": "there_are_additional_requirements",
+            "Пакеты": "packages",
+            "Требуется наличие инфраструктурных объектов": "infrastructure_facilities_are_required",
+            "Кто может быть учредителем": "who_can_be_founder",
+            "Специальные требования к уставному капиталу (текст)": "authorized_capital_min_amount",
+            "ОПФ": "possible_legal_form",
+            "1. ИД органа": "additional_permission_1_authority_id",
+            "1. ИД Услуги": "additional_permission_1_service_id",
+            "2. ИД органа": "additional_permission_2_authority_id",
+            "2. ИД Услуги": "additional_permission_2_service_id",
+            "3. ИД органа": "additional_permission_3_authority_id",
+            "3. ИД Услуги": "additional_permission_3_service_id",
+        }
 
 
-    st.markdown("**1. Введите код бизнес-деятельности**")
-    pre["activity_code"] = st.selectbox(
-        label="",
-        options=DB_FIELD_OPTIONS,
-        index=_idx(pre.get("activity_code")),
-        key="pre_db_activity_code",
+    def normalize_header_name(value: str) -> str:
+        if value is None:
+            return ""
+        s = str(value).replace("\u00A0", " ")
+        s = " ".join(s.split())
+        return s.strip().lower()
+
+
+    def auto_map_manager_columns_to_db(headers: list[str], mapping_dict: dict[str, str]) -> pd.DataFrame:
+        norm_mapping = {normalize_header_name(k): v for k, v in mapping_dict.items()}
+
+        rows = []
+        for col in headers:
+            db_field = norm_mapping.get(normalize_header_name(col))
+            rows.append(
+                {
+                    "Столбец в файле менеджера": col,
+                    "Поле в БД": db_field if db_field else "нет сопоставления с полями в БД",
+                }
+            )
+
+        return pd.DataFrame(rows)
+
+
+    # ===================== AUTO UI: manager file -> DB mapping =====================
+
+    st.markdown("---")
+    st.markdown("### Сопоставление столбцов файла менеджера с полями БД")
+
+    uploaded_manager_file = st.file_uploader(
+        "1) Загрузите xlsx, который обработал менеджер",
+        type=["xlsx"],
+        key="uploaded_manager_file_for_db_mapping",
     )
 
-    st.markdown("**2. Официальное название бизнес-деятельности en**")
-    pre["official_title_en"] = st.selectbox(
-        label="",
-        options=DB_FIELD_OPTIONS,
-        index=_idx(pre.get("official_title_en")),
-        key="pre_db_official_title_en",
-    )
+    if uploaded_manager_file is not None:
+        st.session_state.manager_processed_bytes = uploaded_manager_file.read()
 
-    st.markdown("**3. 1. Выберите орган**")
-    pre["authority"] = st.selectbox(
-        label="",
-        options=DB_FIELD_OPTIONS,
-        index=_idx(pre.get("authority")),
-        key="pre_db_authority",
-    )
+    c1, c2 = st.columns(2)
 
-    st.markdown("**4. 2. Выберите услугу**")
-    pre["service"] = st.selectbox(
-        label="",
-        options=DB_FIELD_OPTIONS,
-        index=_idx(pre.get("service")),
-        key="pre_db_service",
-    )
+    with c1:
+        if st.button("Очистить загруженный файл менеджера"):
+            st.session_state.manager_processed_bytes = None
+            st.session_state.manager_db_mapping_result = None
+            st.rerun()
 
-    st.session_state["pre_db_mapping"] = pre
-    # ==============================================================================
+    with c2:
+        if st.button(
+                "2) Найти сопоставления с полями БД автоматически",
+                disabled=st.session_state.manager_processed_bytes is None,
+                type="primary",
+        ):
+            try:
+                df_manager = pd.read_excel(io.BytesIO(st.session_state.manager_processed_bytes))
+                manager_headers = list(df_manager.columns)
 
+                ru_to_db_mapping = build_ru_to_db_field_mapping()
+                mapping_result_df = auto_map_manager_columns_to_db(
+                    headers=manager_headers,
+                    mapping_dict=ru_to_db_mapping,
+                )
+
+                st.session_state.manager_db_mapping_result = mapping_result_df
+
+            except Exception as e:
+                st.session_state.manager_db_mapping_result = None
+                st.error(f"Не удалось обработать файл менеджера: {e}")
+
+    mapping_result_df = st.session_state.get("manager_db_mapping_result")
+
+    if mapping_result_df is not None and not mapping_result_df.empty:
+        st.markdown("### 3) Результат автоматического сопоставления")
+
+        left_col, right_col = st.columns(2)
+
+        with left_col:
+            st.markdown("**Столбцы на русском**")
+            for val in mapping_result_df["Столбец в файле менеджера"].tolist():
+                st.write(val)
+
+        with right_col:
+            st.markdown("**Найденное поле в БД**")
+            for val in mapping_result_df["Поле в БД"].tolist():
+                st.write(val)
+
+        st.markdown("---")
+        st.dataframe(mapping_result_df, use_container_width=True)
